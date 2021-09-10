@@ -33,8 +33,9 @@
         "mod_action": {
           "type": "timeout",
           "reason": "Spamming Caps",
-          "base": 60,
-          "additional": 120
+          "constant": 60,
+          "linear": 120,
+          "quadratic": 0
         }
       },
       {
@@ -70,8 +71,9 @@
         "mod_action": {
           "type": "timeout",
           "reason": "Writing Long Paragraphs",
-          "base": 10,
-          "additional": 30
+          "constant": 10,
+          "linear": 20,
+          "quadratic": 10
         }
       }
     ],
@@ -100,8 +102,9 @@
         "mod_action": {
           "type": "timeout",
           "reason": "Writing Links",
-          "base": 60,
-          "additional": 300
+          "constant": 60,
+          "linear": 60,
+          "quadratic": 30
         }
       },
       {
@@ -136,8 +139,9 @@
         "mod_action": {
           "type": "timeout",
           "reason": "Using the /me command",
-          "base": 10,
-          "additional": 60
+          "constant": 10,
+          "linear": 20,
+          "quadratic": 10
         }
       }
     ],

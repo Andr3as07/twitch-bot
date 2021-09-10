@@ -128,37 +128,39 @@ class MyBot(twitch.Bot):
     except:  # TODO: FIX
       self.logger.warning('Failed to write userdata to "%s"' % path)
 
-  def perform_mod_punishment(self, msg, mod_action, count=0):
-    type = mod_action["type"]
-    if type == "nothing":
+  def perform_mod_action(self, msg, mod_action, count=0):
+    mod_action_type = mod_action["type"]
+
+    reason = None
+    if "reason" in mod_action:
+      reason = mod_action["reason"]
+
+    if mod_action_type == "nothing":
       return 0
-    elif type == "remove_message":
+    elif mod_action_type == "remove_message":
       msg.delete()
       return 0
-    elif type == "timeout":
-      base = 600
-      if "base" in mod_action:
-        base = mod_action["base"]
-      additional = 3600
-      if "additional" in mod_action:
-        additional = mod_action["additional"]
-      duration = base + (count * additional)
-
-      reason = None
-      if "reason" in mod_action:
-        reason = mod_action["reason"]
+    elif mod_action_type == "timeout":
+      # Calculate timeout duration
+      # t = a*x^2 + b*x + c
+      constant = 600
+      if "constant" in mod_action:
+        constant = mod_action["constant"]
+      linear = 0
+      if "linear" in mod_action:
+        linear = mod_action["linear"]
+      quadratic = 0
+      if "quadratic" in mod_action:
+        quadratic = mod_action["quadratic"]
+      duration = (quadratic * count * count) + (linear * count) + constant
 
       msg.author.timeout(duration, reason)
       return duration
-    elif type == "ban":
-      reason = None
-      if "reason" in mod_action:
-        reason = mod_action["reason"]
-
+    elif mod_action_type == "ban":
       msg.author.ban(reason)
       return 0
     else:
-      self.logger.warning("Unknown mod action: %s" % type)
+      self.logger.warning("Unknown mod action: %s" % mod_action_type)
       return 0
 
   def perform_tiered_action(self, msg, actions, count=1):
@@ -171,7 +173,7 @@ class MyBot(twitch.Bot):
 
     tiered_action_count = count - best["count"]
 
-    duration = self.perform_mod_punishment(msg, best["mod_action"], tiered_action_count)
+    duration = self.perform_mod_action(msg, best["mod_action"], tiered_action_count)
 
     if len(best["messages"]) > 0:
       text = random.choice(best["messages"])
