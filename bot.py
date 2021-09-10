@@ -28,7 +28,7 @@ class UserType(IntFlag):
 
 class Bot:
   def __init__(self, nickname, token):
-    self._nickname = nickname.lower()
+    self.nickname = nickname.lower()
     self._token = token
     self._socket = None
     self._channels = {}
@@ -42,7 +42,7 @@ class Bot:
     self._socket = socket.socket()
     self._socket.connect((HOST, PORT))
     self.send("PASS %s" % self._token)
-    self.send("NICK %s" % self._nickname)
+    self.send("NICK %s" % self.nickname)
     self.send("CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands")
 
     self.on_connect()

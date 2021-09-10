@@ -50,17 +50,29 @@ class MyBot(twitch.Bot):
     self.logger.debug('Initialized with nick %s.' % nickname)
 
     self.config = None
-    self.load_config(path)
+    self.load_config(path + "/config.json")
     if self.config is None:
       self.logger.critical("Bot can not run without valid config.")
       raise RuntimeError()
     self.user_data = {} # TODO: FIX: This should be separated into the different channels
-    self.bots = []
 
+    # Ignored users
+    self.ignored_users = []
+    if os.path.exists(path + "/ignored_users.txt"):
+      self.logger.info("Loading ignored users list...")
+      try:
+        with io.open(path + "/ignored_users.txt") as f:
+          for username in f.readlines():
+            self.ignored_users.append(username.strip().lower())
+        self.logger.info("Ignoring %s usernames." % len(self.ignored_users))
+      except:
+        self.logger.error("Failed to load ignored users list!")
+
+    # Botlist
+    self.bots = []
     url = "https://api.twitchinsights.net/v1/bots/all"
     self.logger.info('Downloading bot list from "%s"...' % url)
     r = requests.get(url)
-    self.bots = []
     for bot in json.loads(r.text)["bots"]:
       self.bots.append(bot[0])
     self.logger.info("Loaded %s bots." % len(self.bots))
@@ -203,14 +215,17 @@ class MyBot(twitch.Bot):
 
     return len(urls) > 0
 
-  def moderate(self, msg, userdata):
+  def moderate(self, msg):
     # Ignore Twitch Staff, Broadcasters and Moderators
     if msg.author.has_type(twitch.UserType.Broadcaster) or \
       msg.author.has_type(twitch.UserType.Twitch) or \
       msg.author.has_type(twitch.UserType.Moderator):
       return
 
-    # TODO: Ignore specific users
+    userdata = self.load_user(msg.author)
+
+    # TODO: Find a way to only apply the most severe punishment and not multiple
+    # TODO: Ignore specific users or groups
 
     # Caps "THIS IS A SHOUTED MESSAGE"
     if self.mod_caps(msg):
@@ -292,23 +307,36 @@ class MyBot(twitch.Bot):
 
   def on_message(self, msg):
     self.logger.debug('on_message(%s, %s, "%s")' % (msg.channel.name, msg.author.display_name, msg.text))
-    userdata = self.load_user(msg.author)
-    self.moderate(msg, userdata)
 
+    # Ignore self (echo)
+    if msg.author.name.strip().lower() == self.nickname:
+      self.logger.debug('Ignoring self (echo)')
+      return
+
+    # Ignored user list
+    if msg.author.name.strip().lower() in self.ignored_users:
+      self.logger.debug('Ignoring user "%s"' % msg.author.name)
+      return
+
+    self.moderate(msg)
+
+    # Commands must start with this prefix
     if not msg.text.startswith('?'):
       return
 
+    # Commands must contain at least the command name
     args = msg.text.strip().split(' ')
     if len(args) == 0:
       return
-
-    if len(args[0]) == 1:
+    elif len(args[0]) == 1:
       return
 
+    # The command name is up to the first space.
+    # Anything after that is a space separated list of arguments
     cmd = args[0][1:]
     args.pop(0)
 
-    self.on_command(msg, cmd, args, userdata)
+    self.on_command(msg, cmd, args)
 
   def on_destruct(self):
     self.logger.debug("on_destruct")
@@ -330,7 +358,7 @@ class MyBot(twitch.Bot):
 
 if __name__ == '__main__':
   load_dotenv()
-  bot = MyBot("whyamitalking", os.getenv('CHAT_TOKEN'), "./config/config.json")
+  bot = MyBot("whyamitalking", os.getenv('CHAT_TOKEN'), "./config")
   bot.connect()
   channel = bot.join_channel("Andr3as07")
   bot.run()
