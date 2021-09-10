@@ -1,3 +1,5 @@
+import logging
+
 from dotenv import load_dotenv
 import time
 import bot as twitch
@@ -8,39 +10,6 @@ import json
 import os
 import re
 import io
-
-def perform_mod_punishment(msg, mod_action, count = 0):
-  type = mod_action["type"]
-  if type == "nothing":
-    return 0
-  elif type == "remove_message":
-    msg.delete()
-    return 0
-  elif type == "timeout":
-    base = 600
-    if "base" in mod_action:
-      base = mod_action["base"]
-    additional = 3600
-    if "additional" in mod_action:
-      additional = mod_action["additional"]
-    duration = base + (count * additional)
-
-    reason = None
-    if "reason" in mod_action:
-      reason = mod_action["reason"]
-
-    msg.author.timeout(duration, reason)
-    return duration
-  elif type == "ban":
-    reason = None
-    if "reason" in mod_action:
-      reason = mod_action["reason"]
-
-    msg.author.ban(reason)
-    return 0
-  else:
-    print("Unknown mod action: %s" % type)
-    return 0
 
 def substitute_variables(text, data):
   if not "{" in text:
@@ -67,53 +36,58 @@ def substitute_variables(text, data):
 
   return result
 
-def perform_tiered_action(msg, actions, count = 1):
-  best = None
-  for action in actions:
-    if best is None or count >= action["count"] > best["count"]:
-      best = action
-  if best is None:
-    return
-
-  tiered_action_count = count - best["count"]
-
-  duration = perform_mod_punishment(msg, best["mod_action"], tiered_action_count)
-
-  if len(best["messages"]) > 0:
-    text = random.choice(best["messages"])
-    data = {
-      "user.name": msg.author.name,
-      "count": count,
-      "duration": duration
-    }
-    msg.channel.chat(substitute_variables(text, data))
-
 class MyBot(twitch.Bot):
   def __init__(self, nickname, token, path):
     super().__init__(nickname, token)
+    self.logger = logging.getLogger('bot')
+    c_handler = logging.StreamHandler()
+    c_handler.setLevel(logging.DEBUG)
+    c_formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s', '%Y-%m-%d %H:%M:%S')
+    c_handler.setFormatter(c_formatter)
+    self.logger.addHandler(c_handler)
+    self.logger.setLevel(logging.DEBUG)
+
+    self.logger.debug('Initialized with nick %s.' % nickname)
+
     self.config = None
     self.load_config(path)
+    if self.config is None:
+      self.logger.critical("Bot can not run without valid config.")
+      raise RuntimeError()
     self.user_data = {} # TODO: FIX: This should be separated into the different channels
     self.bots = []
 
+    url = "https://api.twitchinsights.net/v1/bots/all"
+    self.logger.info('Downloading bot list from "%s"...' % url)
+    r = requests.get(url)
+    self.bots = []
+    for bot in json.loads(r.text)["bots"]:
+      self.bots.append(bot[0])
+    self.logger.info("Loaded %s bots." % len(self.bots))
+    self.logger.info("Ready")
+
   def load_config(self, path):
+    self.logger.info('Loading config from "%s"' % path)
     try:
       with io.open(path, mode="r", encoding="utf-8") as f:
         config = json.load(f)
     except: # TODO: FIX
-      print("Failed to load config")
-      return
+      self.logger.error("Failed to load config!")
+      return False
 
+    self.logger.debug("Successfully loaded config.")
     self.config = config
 
   def load_user(self, chatter):
     if not chatter.id in self.user_data:
       path = "./data/users/%s.json" % chatter.id
+      self.logger.debug('Loading userdata from "%s"' % path)
       try:
         with io.open(path, mode="r", encoding="utf-8") as f:
           raw = json.load(f)
           data = Userdata(raw)
-      except:  # TODO: FIX
+      except: # TODO: FIX
+        self.logger.debug('Failed to load userdata from "%s"! Generating default userdata.' % path)
         raw = {
           "id": chatter.id,
           "name": chatter.name,
@@ -133,13 +107,68 @@ class MyBot(twitch.Bot):
       user = user.data
 
     path = "./data/users/%s.json" % user.get("id")
+    self.logger.debug('Saving userdata to "%s"' % path)
     try:
       with io.open(path, mode="w", encoding="utf-8") as f:
         user.set("stats.last_saved", int(time.time()))
         raw = user.raw
         json.dump(raw, f)
     except:  # TODO: FIX
-      print("Failed to write user data for %s" % user.get("name"))
+      self.logger.warning('Failed to write userdata to "%s"' % path)
+
+  def perform_mod_punishment(self, msg, mod_action, count=0):
+    type = mod_action["type"]
+    if type == "nothing":
+      return 0
+    elif type == "remove_message":
+      msg.delete()
+      return 0
+    elif type == "timeout":
+      base = 600
+      if "base" in mod_action:
+        base = mod_action["base"]
+      additional = 3600
+      if "additional" in mod_action:
+        additional = mod_action["additional"]
+      duration = base + (count * additional)
+
+      reason = None
+      if "reason" in mod_action:
+        reason = mod_action["reason"]
+
+      msg.author.timeout(duration, reason)
+      return duration
+    elif type == "ban":
+      reason = None
+      if "reason" in mod_action:
+        reason = mod_action["reason"]
+
+      msg.author.ban(reason)
+      return 0
+    else:
+      self.logger.warning("Unknown mod action: %s" % type)
+      return 0
+
+  def perform_tiered_action(self, msg, actions, count=1):
+    best = None
+    for action in actions:
+      if best is None or count >= action["count"] > best["count"]:
+        best = action
+    if best is None:
+      return
+
+    tiered_action_count = count - best["count"]
+
+    duration = self.perform_mod_punishment(msg, best["mod_action"], tiered_action_count)
+
+    if len(best["messages"]) > 0:
+      text = random.choice(best["messages"])
+      data = {
+        "user.name": msg.author.name,
+        "count": count,
+        "duration": duration
+      }
+      msg.channel.chat(substitute_variables(text, data))
 
   def mod_caps(self, msg):
     config = self.config["caps"]
@@ -190,7 +219,7 @@ class MyBot(twitch.Bot):
       view.set("time", int(time.time()))
 
       self.save_user(userdata)
-      perform_tiered_action(msg, self.config["caps"]["actions"], view.get("count", 1))
+      self.perform_tiered_action(msg, self.config["caps"]["actions"], view.get("count", 1))
 
     # Length "<paragraph of text>"
     if self.mod_length(msg):
@@ -199,7 +228,7 @@ class MyBot(twitch.Bot):
       view.set("time", int(time.time()))
 
       self.save_user(userdata)
-      perform_tiered_action(msg, self.config["length"]["actions"], view.get("count", 1))
+      self.perform_tiered_action(msg, self.config["length"]["actions"], view.get("count", 1))
 
     # TODO: Words "<swear>"
 
@@ -210,7 +239,7 @@ class MyBot(twitch.Bot):
       view.set("time", int(time.time()))
 
       self.save_user(userdata)
-      perform_tiered_action(msg, self.config["links"]["actions"], view.get("count", 1))
+      self.perform_tiered_action(msg, self.config["links"]["actions"], view.get("count", 1))
 
     # TODO: Repeats "Hi Hi Hi Hi Hi"
     # TODO: Long words "Pneumonoultramicroscopicsilicovolcanoconiosis"
@@ -224,7 +253,7 @@ class MyBot(twitch.Bot):
     # TODO: Fake messages "message deleted by a moderator"
 
   def on_command(self, msg, cmd, args, userdata):
-    print("%s %s" % (cmd, args))
+    self.logger.debug("on_command(%s, %s, %s)" % (msg.channel.name, cmd, args))
 
     # Utility
     # TODO: Help (!help, !commands)
@@ -262,7 +291,7 @@ class MyBot(twitch.Bot):
     # TODO: Custom commands
 
   def on_message(self, msg):
-    print("[%s] %s: %s" % (msg.channel.name, msg.author.display_name, msg.text))
+    self.logger.debug('on_message(%s, %s, "%s")' % (msg.channel.name, msg.author.display_name, msg.text))
     userdata = self.load_user(msg.author)
     self.moderate(msg, userdata)
 
@@ -282,30 +311,22 @@ class MyBot(twitch.Bot):
     self.on_command(msg, cmd, args, userdata)
 
   def on_destruct(self):
+    self.logger.debug("on_destruct")
+    self.logger.info("Saving all user data...")
     for user in self.user_data:
       self.save_user(user)
 
-  def on_ready(self):
-    print("Downloading bot list...")
-    url = "https://api.twitchinsights.net/v1/bots/all"
-    r = requests.get(url)
-    self.bots = []
-    for bot in json.loads(r.text)["bots"]:
-      self.bots.append(bot[0])
-    print("Loaded %s bots." % len(self.bots))
-    print("Ready")
-
   def on_connect(self):
-    print("(Re)connected to twitch chat servers.")
+    self.logger.debug("(Re)connected to twitch chat servers.")
 
   def on_channel_join(self, channel):
-    print("Joined channel %s" % channel.name)
+    self.logger.info("Joined channel %s" % channel.name)
 
   def on_channel_part(self, channel):
-    print("Parted from channel %s" % channel.name)
+    self.logger.info("Parted from channel %s" % channel.name)
 
   def on_error(self, error):
-    print("ERROR: " + error)
+    self.logger.error(error)
 
 if __name__ == '__main__':
   load_dotenv()
