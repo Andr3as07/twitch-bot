@@ -1,0 +1,120 @@
+{
+  "caps": {
+    "min": 10,
+    "max": 50,
+    "percent": 0.60,
+    "actions": [
+      {
+        "count": 1,
+        "messages": [
+          "@{user.name} -> Bitte verwende weniger Caps.",
+          "@{user.name} -> Weniger Großbuchstaben sorgen für weniger Geschreie im chat."
+        ],
+        "mod_action": {
+          "type": "nothing"
+        }
+      },
+      {
+        "count": 2,
+        "messages": [
+          "@{user.name} -> Bitte vermeide das Spammen von Caps.",
+          "@{user.name} -> Bitte unterlasse die übertribene Nutzung von Großbuchstaben."
+        ],
+        "mod_action": {
+          "type": "remove_message"
+        }
+      },
+      {
+        "count": 3,
+        "messages": [
+          "@{user.name} -> Höre auf, Caps zu spammen.",
+          "@{user.name} -> Verzichte auf große Mengen an Großbuchstaben."
+        ],
+        "mod_action": {
+          "type": "timeout",
+          "reason": "Spamming Caps",
+          "base": 60,
+          "additional": 120
+        }
+      },
+      {
+        "count": 10,
+        "messages": [],
+        "mod_action": {
+          "type": "ban",
+          "reason": "Spamming Caps"
+        }
+      }
+    ],
+    "exclusion": [
+      "regular"
+    ]
+  },
+  "length": {
+    "max": 300,
+    "actions": [
+      {
+        "count": 1,
+        "messages": [
+          "@{user.name} -> Bitte keine langen Nachrichten senden."
+        ],
+        "mod_action": {
+          "type": "nothing"
+        }
+      },
+      {
+        "count": 2,
+        "messages": [
+          "@{user.name} -> Bitte keine langen Nachrichten."
+        ],
+        "mod_action": {
+          "type": "timeout",
+          "reason": "Writing Long Paragraphs",
+          "base": 10,
+          "additional": 30
+        }
+      }
+    ],
+    "exclusion": [
+      "regular",
+      "subscriber"
+    ]
+  },
+  "links": {
+    "actions": [
+      {
+        "count": 1,
+        "messages": [
+          "@{user.name} -> Bitte keine links."
+        ],
+        "mod_action": {
+          "type": "remove_message"
+        }
+      },
+      {
+        "count": 3,
+        "messages": [
+          "@{user.name} -> Keine links im chat.",
+          "@{user.name} -> Verzichte auf die Nutzung von Links."
+        ],
+        "mod_action": {
+          "type": "timeout",
+          "reason": "Writing Links",
+          "base": 60,
+          "additional": 300
+        }
+      },
+      {
+        "count": 10,
+        "messages": [],
+        "mod_action": {
+          "type": "ban",
+          "reason": "Writing Links"
+        }
+      }
+    ],
+    "exclusions": [
+      "regular"
+    ]
+  }
+}
