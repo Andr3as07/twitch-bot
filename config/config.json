@@ -116,5 +116,31 @@
     "exclusions": [
       "regular"
     ]
+  },
+  "me": {
+    "actions": [
+      {
+        "count": 1,
+        "messages": [
+          "@{user.name} -> /me ist nicht erlaubt."
+        ],
+        "mod_action": {
+          "type": "remove_message"
+        }
+      },
+      {
+        "count": 3,
+        "messages": [
+          "@{user.name} -> /me ist nicht erlaubt."
+        ],
+        "mod_action": {
+          "type": "timeout",
+          "reason": "Using the /me command",
+          "base": 10,
+          "additional": 60
+        }
+      }
+    ],
+    "exclusions": []
   }
 }

@@ -215,6 +215,9 @@ class MyBot(twitch.Bot):
 
     return len(urls) > 0
 
+  def mod_me(self, msg):
+    return msg.text.startswith('ACTION ') and msg.text.endswith('')
+
   def moderate(self, msg):
     # Ignore Twitch Staff, Broadcasters and Moderators
     if msg.author.has_type(twitch.UserType.Broadcaster) or \
@@ -263,7 +266,15 @@ class MyBot(twitch.Bot):
     # TODO: Emotes "Kappa Kappa Kappa Kappa Kappa Kappa Kappa Kappa"
     # TODO: Numbers "1235123541254154123123"
     # TODO: Repeated messages
-    # TODO: /me
+    # /me
+    if self.mod_me(msg):
+      view = userdata.view("moderation.me")
+      view.set("count", view.get("count", 0) + 1)
+      view.set("time", int(time.time()))
+
+      self.save_user(userdata)
+      self.perform_tiered_action(msg, self.config["me"]["actions"], view.get("count", 1))
+
     # TODO: Command spam "!bla"
     # TODO: Fake messages "message deleted by a moderator"
 
