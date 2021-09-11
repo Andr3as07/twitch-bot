@@ -87,33 +87,55 @@ class MyBot(libtwitch.Bot):
     self._cogs : dict[str, libtwitch.Cog] = {}
 
   def add_cog(self, name : str, cog : libtwitch.Cog):
+    self.logger.info("Adding cog \"%s\"..." % name)
     if not isinstance(cog, libtwitch.Cog):
+      self.logger.warning("Failed to add cog \"%s\"! Cogs must derive from Cog!" % name)
       return False # cogs must derive from Cog
 
     self._cogs[name] = cog
+    cog.invoke(libtwitch.CogEvent.SelfLoad)
+
+    for other_cog_name in self._cogs: # Inform all other cogs
+      if other_cog_name == name:
+        continue
+      self._cog_event(libtwitch.CogEvent.CogLoad, name) # Inform the cog of it's own loading
+
+    self.logger.info("Added cog \"%s\"." % name)
 
   def get_cog(self, name : str):
     return self._cogs.get(name)
 
-  def remove_cog(self, name):
+  def remove_cog(self, name : str):
+    self.logger.info("Removing cog \"%s\"..." % name)
     cog = self._cogs.pop(name, None)
-    return cog is not None
+    if cog is None:
+      self.logger.warning("Failed to remove cog \"%s\"! Cog is not loaded!" % name)
+      return
+
+    cog.invoke(libtwitch.CogEvent.SelfUnload) # Inform the cog of it's own unloading
+    self._cog_event(libtwitch.CogEvent.CogUnload, name) # Inform all other cogs
+    self.logger.info("Removed cog \"%s\"." % name)
 
   def _cog_event(self, event : libtwitch.CogEvent, *args, **kwargs):
     for cog in self._cogs:
       self._cogs[cog].invoke(event, *args, **kwargs)
 
   def load_extension(self, path):
+    self.logger.info("Loading extension with path \"%s\"..." % path)
+
     try:
       name = importlib.util.resolve_name(path, None)
     except ImportError:
+      self.logger.warning("Failed to load extension with path \"%s\"! Extension not found!" % path)
       return False # Extension not found
 
     if name in self._extensions:
+      self.logger.warning("Failed to load extension \"%s\"! Extension already loaded!" % name)
       return False # Already loaded
 
     spec = importlib.util.find_spec(name)
     if spec is None:
+      self.logger.warning("Failed to load extension \"%s\"! Extension not found!" % name)
       return False # Extension not found
 
     lib = importlib.util.module_from_spec(spec)
@@ -122,23 +144,27 @@ class MyBot(libtwitch.Bot):
       spec.loader.exec_module(lib)
     except Exception as ex:
       del sys.modules[name]
+      self.logger.warning("Failed to load extension \"%s\"!" % name)
       return False # Failed to load extension
 
     try:
       setup = getattr(lib, 'setup')
     except AttributeError:
       del sys.modules[name]
+      self.logger.warning("Failed to load extension \"%s\"! Entry point not found!" % name)
       return # Entry point not found
 
     try:
       setup(self)
     except Exception as ex:
+      self.logger.warning("Failed to load extension \"%s\"! Error while calling extension entry point!" % name)
       del sys.modules[name]
       # self._remove_module_references(lib.__name__)
       self._call_extension_finalizer(lib, name)
       return False # Error while calling extension entry point
     else:
       self._extensions[name] = lib
+      self.logger.info("Loaded extension \"%s\"." % name)
 
   def _call_extension_finalizer(self, lib, key):
     try:
@@ -158,8 +184,22 @@ class MyBot(libtwitch.Bot):
         if name == module or module.startswith(name + "."):
           del sys.modules[module]
 
-  def unload_extension(self, name):
-    print("TODO: unload_extension")
+  def unload_extension(self, path):
+    self.logger.info("Unloading extension with path \"%s\"..." % path)
+
+    try:
+      name = importlib.util.resolve_name(path, None)
+    except ImportError:
+      self.logger.warning("Failed to unload extension with path \"%s\"! Extension not found!" % path)
+      return False # Extension not found
+
+    lib = self._extensions.get(name)
+    if lib is None:
+      self.logger.warning("Failed to unload extension \"%s\"! Extension not loaded!" % name)
+      return False # Extension not loaded
+
+    self._call_extension_finalizer(lib, name)
+    self.logger.info("Unloaded extension \"%s\"." % name)
 
   def load_config(self, path : str) -> bool:
     self.logger.info('Loading config from "%s"' % path)
@@ -435,6 +475,13 @@ class MyBot(libtwitch.Bot):
 
   def on_destruct(self):
     self.logger.debug("on_destruct")
+
+    self._cog_event(libtwitch.CogEvent.Destruct)
+
+    self.logger.info("Unloading all extensions...")
+    for extension in self._extensions:
+      self.unload_extension(extension)
+
     self.logger.info("Saving all user data...")
     for user in self.user_data:
       self.save_user(user)
@@ -456,5 +503,6 @@ if __name__ == '__main__':
   bot = MyBot("whyamitalking", os.getenv('CHAT_TOKEN'), "./config")
   bot.load_extension("cogs.Example")
   bot.connect()
+  bot.unload_extension("cogs.Example")
   channel = bot.join_channel("Andr3as07")
   bot.run()

@@ -15,3 +15,6 @@ class ExampleCog(Cog):
 
 def setup(bot):
   bot.add_cog("example", ExampleCog(bot))
+
+def teardown(bot):
+  bot.remove_cog("example")
