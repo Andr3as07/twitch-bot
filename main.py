@@ -1,4 +1,6 @@
 import logging
+from enum import IntEnum
+from functools import total_ordering
 
 from dotenv import load_dotenv
 import time
@@ -10,6 +12,70 @@ import json
 import os
 import re
 import io
+
+class ModerationActionType(IntEnum):
+  Nothing = 0
+  RemoveMessage = 1
+  Timeout = 2
+  Ban = 3
+
+@total_ordering
+class ModerationAction:
+  def __init__(self, action, duration = 0, reason = None, response = None):
+    self.action = action
+    self.reason = reason
+    self.response = response
+    self.duration = duration
+
+  def invoke(self, message):
+    # Respond if we have a response
+    if self.response is not None:
+      #if message is not None:
+      #  message.respond(self.response)
+      #else:
+      message.channel.chat(self.response)
+
+    # Perform the actual moderation action
+    if self.action == ModerationActionType.Nothing:
+      return True # Do nothing
+    elif self.action == ModerationActionType.RemoveMessage:
+      if message is None: # We can't remove the message if we don't know what message we are talking about.
+        return False
+      message.delete()
+    elif self.action == ModerationActionType.Timeout:
+      message.author.timeout(self.duration, self.reason)
+      return True
+    elif self.action == ModerationActionType.Ban:
+      message.author.ban(self.reason)
+      return True
+
+    return False
+
+  def __eq__(self, other):
+    if self.action == other.action:
+      if self.action == ModerationActionType.Timeout:
+        return self.duration == other.duration
+      return True
+    return False
+
+  def __ne__(self, other):
+    return not (self == other)
+
+  def __lt__(self, other):
+    if self.action < other.action:
+      return True
+
+    if self.action == other.action and self.action == ModerationActionType.Timeout:
+      if self.duration < other.duration:
+        return True
+
+    if self.reason is None and other.reason is not None:
+      return True
+
+    if self.response is None and other.response is not None:
+      return True
+
+    return False
 
 def substitute_variables(text, data):
   if not "{" in text:
@@ -128,18 +194,30 @@ class MyBot(twitch.Bot):
     except:  # TODO: FIX
       self.logger.warning('Failed to write userdata to "%s"' % path)
 
-  def perform_mod_action(self, msg, mod_action, count=0):
+
+  def get_tiered_moderation_action(self, msg, actions, count=1):
+    best = None
+    for action in actions:
+      if best is None or count >= action["count"] > best["count"]:
+        best = action
+    if best is None:
+      return
+
+
+    relative_count = count - best["count"]
+
+    mod_action = best["mod_action"]
     mod_action_type = mod_action["type"]
 
-    reason = None
+    # Get appropriate moderation action
+    moderation_action = ModerationAction(ModerationActionType.Nothing)
     if "reason" in mod_action:
-      reason = mod_action["reason"]
+      moderation_action.reason = mod_action["reason"]
 
     if mod_action_type == "nothing":
-      return 0
+      moderation_action.action = ModerationActionType.Nothing
     elif mod_action_type == "remove_message":
-      msg.delete()
-      return 0
+      moderation_action.action = ModerationActionType.RemoveMessage
     elif mod_action_type == "timeout":
       # Calculate timeout duration
       # t = a*x^2 + b*x + c
@@ -152,37 +230,25 @@ class MyBot(twitch.Bot):
       quadratic = 0
       if "quadratic" in mod_action:
         quadratic = mod_action["quadratic"]
-      duration = (quadratic * count * count) + (linear * count) + constant
+      duration = (quadratic * relative_count * relative_count) + (linear * relative_count) + constant
 
-      msg.author.timeout(duration, reason)
-      return duration
+      moderation_action.action = ModerationActionType.Timeout
+      moderation_action.duration = duration
     elif mod_action_type == "ban":
-      msg.author.ban(reason)
-      return 0
+      moderation_action.action = ModerationActionType.Ban
     else:
       self.logger.warning("Unknown mod action: %s" % mod_action_type)
-      return 0
-
-  def perform_tiered_action(self, msg, actions, count=1):
-    best = None
-    for action in actions:
-      if best is None or count >= action["count"] > best["count"]:
-        best = action
-    if best is None:
-      return
-
-    tiered_action_count = count - best["count"]
-
-    duration = self.perform_mod_action(msg, best["mod_action"], tiered_action_count)
 
     if len(best["messages"]) > 0:
       text = random.choice(best["messages"])
       data = {
         "user.name": msg.author.name,
         "count": count,
-        "duration": duration
+        "duration": moderation_action.duration
       }
-      msg.channel.chat(substitute_variables(text, data))
+      moderation_action.response = substitute_variables(text, data)
+
+    return moderation_action
 
   def mod_caps(self, msg):
     config = self.config["caps"]
@@ -213,12 +279,26 @@ class MyBot(twitch.Bot):
 
     # findall() has been used with valid conditions for urls in string
     regex = r"((https?://)?(([^\s()<>]+)\.)*([a-z0-9\-.]+)\.([a-z]{2,})([^\s()<>?#]*)(?:\?([^\s()<>=#&]+=[^\s()<>=#&]*)(&([^\s()<>=#&]+=[^\s()<>=#&]*))*)?(?:#([^\s()<>]*))?)"
-    urls = re.findall(regex, msg.text)
+    urls = re.findall(regex, msg.text, re.IGNORECASE)
 
     return len(urls) > 0
 
   def mod_me(self, msg):
     return msg.text.startswith('ACTION ') and msg.text.endswith('')
+
+  def moderation_helper(self, msg, function, mod_tool_name, most_appropriate_mod_action):
+    if function(msg):
+      userdata = self.load_user(msg.author)
+      view = userdata.view("moderation.%s" % mod_tool_name)
+      view.set("count", view.get("count", 0) + 1)
+      view.set("time", int(time.time()))
+
+      self.save_user(userdata)
+      action = self.get_tiered_moderation_action(msg, self.config[mod_tool_name]["actions"], view.get("count", 1))
+
+      if action > most_appropriate_mod_action:
+        return action
+    return most_appropriate_mod_action
 
   def moderate(self, msg):
     # Ignore Twitch Staff, Broadcasters and Moderators
@@ -232,34 +312,18 @@ class MyBot(twitch.Bot):
     # TODO: Find a way to only apply the most severe punishment and not multiple
     # TODO: Ignore specific users or groups
 
-    # Caps "THIS IS A SHOUTED MESSAGE"
-    if self.mod_caps(msg):
-      view = userdata.view("moderation.caps")
-      view.set("count", view.get("count", 0) + 1)
-      view.set("time", int(time.time()))
+    action = ModerationAction(ModerationActionType.Nothing)
 
-      self.save_user(userdata)
-      self.perform_tiered_action(msg, self.config["caps"]["actions"], view.get("count", 1))
+    # Caps "THIS IS A SHOUTED MESSAGE"
+    action = self.moderation_helper(msg, self.mod_caps, "caps", action)
 
     # Length "<paragraph of text>"
-    if self.mod_length(msg):
-      view = userdata.view("moderation.length")
-      view.set("count", view.get("count", 0) + 1)
-      view.set("time", int(time.time()))
-
-      self.save_user(userdata)
-      self.perform_tiered_action(msg, self.config["length"]["actions"], view.get("count", 1))
+    action = self.moderation_helper(msg, self.mod_length, "length", action)
 
     # TODO: Words "<swear>"
 
     # Links "example.com"
-    if self.mod_links(msg):
-      view = userdata.view("moderation.links")
-      view.set("count", view.get("count", 0) + 1)
-      view.set("time", int(time.time()))
-
-      self.save_user(userdata)
-      self.perform_tiered_action(msg, self.config["links"]["actions"], view.get("count", 1))
+    action = self.moderation_helper(msg, self.mod_links, "links", action)
 
     # TODO: Repeats "Hi Hi Hi Hi Hi"
     # TODO: Long words "Pneumonoultramicroscopicsilicovolcanoconiosis"
@@ -269,16 +333,12 @@ class MyBot(twitch.Bot):
     # TODO: Numbers "1235123541254154123123"
     # TODO: Repeated messages
     # /me
-    if self.mod_me(msg):
-      view = userdata.view("moderation.me")
-      view.set("count", view.get("count", 0) + 1)
-      view.set("time", int(time.time()))
-
-      self.save_user(userdata)
-      self.perform_tiered_action(msg, self.config["me"]["actions"], view.get("count", 1))
+    action = self.moderation_helper(msg, self.mod_me, "me", action)
 
     # TODO: Command spam "!bla"
     # TODO: Fake messages "message deleted by a moderator"
+
+    action.invoke(msg)
 
   def on_command(self, msg, cmd, args, userdata):
     self.logger.debug("on_command(%s, %s, %s)" % (msg.channel.name, cmd, args))
