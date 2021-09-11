@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import IntEnum
 from functools import total_ordering
-import libtwitch
+from libtwitch import *
 
 class ModerationActionType(IntEnum):
   Nothing = 0
@@ -18,7 +18,7 @@ class ModerationAction:
     self.response : str = response
     self.duration : int = duration
 
-  def invoke(self, message : libtwitch.Message) -> bool:
+  def invoke(self, message : Message) -> bool:
     # Respond if we have a response
     if self.response is not None:
       message.channel.chat(self.response)

@@ -1,6 +1,6 @@
 from enum import Enum, auto
 
-from libtwitch.bot import Message
+from libtwitch.core import Message
 
 class CogEvent(Enum):
   Ready = auto()
