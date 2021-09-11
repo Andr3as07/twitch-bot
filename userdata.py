@@ -1,11 +1,12 @@
-import json
+from __future__ import annotations
+from typing import Any, Union
 
 class Userdata:
-  def __init__(self, data):
-    self.id = data["id"]
-    self.raw = data
+  def __init__(self, data : dict):
+    self.id : int = data["id"]
+    self.raw : dict = data
 
-  def get(self, key, fallback = None):
+  def get(self, key : str, fallback = None) -> Any:
     parts = key.split('.')
     current = self.raw
     for part in parts:
@@ -21,7 +22,7 @@ class Userdata:
         pass # TODO
     return current
 
-  def set(self, key, value):
+  def set(self, key : str, value) -> Any:
     parts = key.split('.')
     current = self.raw
     for i, part in enumerate(parts):
@@ -40,7 +41,7 @@ class Userdata:
         pass # TODO
     return False
 
-  def has(self, key):
+  def has(self, key : str) -> bool:
     parts = key.split('.')
     current = self.raw
     for part in parts:
@@ -56,33 +57,33 @@ class Userdata:
         pass # TODO
     return True
 
-  def rem(self, key):
+  def rem(self, key : str) -> bool:
     pass # TODO: Implement
 
-  def view(self, key):
+  def view(self, key : str) -> UserdataView:
     return UserdataView(self, key)
 
 class UserdataView:
-  def __init__(self, data, offset):
-    self.data = data
-    self.offset = offset
+  def __init__(self, data : Union[Userdata, UserdataView], offset : str):
+    self.data : Union[Userdata, UserdataView] = data
+    self.offset : str = offset
 
-  def _concat_key(self, key):
+  def _concat_key(self, key : str) -> str:
     return self.offset + "." + key
 
-  def get(self, key, fallback = None):
+  def get(self, key : str, fallback = None) -> Any:
     return self.data.get(self._concat_key(key), fallback)
 
-  def set(self, key, value):
+  def set(self, key : str, value) -> Any:
     return self.data.set(self._concat_key(key), value)
 
-  def has(self, key):
+  def has(self, key : str) -> bool:
     return self.data.has(self._concat_key(key))
 
-  def rem(self, key):
+  def rem(self, key : str) -> bool:
     return self.data.rem(self._concat_key(key))
 
-  def view(self, key):
+  def view(self, key : str) -> UserdataView:
     # TODO: Validate
     data = self.data
     offset = self.offset

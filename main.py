@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Any, Union
 import logging
 from enum import IntEnum
 from functools import total_ordering
@@ -21,26 +23,21 @@ class ModerationActionType(IntEnum):
 
 @total_ordering
 class ModerationAction:
-  def __init__(self, action, duration = 0, reason = None, response = None):
-    self.action = action
-    self.reason = reason
-    self.response = response
-    self.duration = duration
+  def __init__(self, action : ModerationActionType, duration : int = 0, reason : str = None, response : str = None):
+    self.action : ModerationActionType = action
+    self.reason : str = reason
+    self.response : str = response
+    self.duration : int = duration
 
-  def invoke(self, message):
+  def invoke(self, message : twitch.Message) -> None:
     # Respond if we have a response
     if self.response is not None:
-      #if message is not None:
-      #  message.respond(self.response)
-      #else:
       message.channel.chat(self.response)
 
     # Perform the actual moderation action
     if self.action == ModerationActionType.Nothing:
       return True # Do nothing
     elif self.action == ModerationActionType.RemoveMessage:
-      if message is None: # We can't remove the message if we don't know what message we are talking about.
-        return False
       message.delete()
     elif self.action == ModerationActionType.Timeout:
       message.author.timeout(self.duration, self.reason)
@@ -51,17 +48,17 @@ class ModerationAction:
 
     return False
 
-  def __eq__(self, other):
+  def __eq__(self, other : ModerationAction) -> bool:
     if self.action == other.action:
       if self.action == ModerationActionType.Timeout:
         return self.duration == other.duration
       return True
     return False
 
-  def __ne__(self, other):
+  def __ne__(self, other : ModerationAction) -> bool:
     return not (self == other)
 
-  def __lt__(self, other):
+  def __lt__(self, other : ModerationAction) -> bool:
     if self.action < other.action:
       return True
 
@@ -77,7 +74,7 @@ class ModerationAction:
 
     return False
 
-def substitute_variables(text, data):
+def substitute_variables(text : str, data : dict[str, Any]) -> str:
   if not "{" in text:
     return text
 
@@ -103,9 +100,9 @@ def substitute_variables(text, data):
   return result
 
 class MyBot(twitch.Bot):
-  def __init__(self, nickname, token, path):
+  def __init__(self, nickname : str, token : str, path : str):
     super().__init__(nickname, token)
-    self.logger = logging.getLogger('bot')
+    self.logger : logging.Logger = logging.getLogger('bot')
     c_handler = logging.StreamHandler()
     c_handler.setLevel(logging.DEBUG)
     c_formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s', '%Y-%m-%d %H:%M:%S')
@@ -115,15 +112,15 @@ class MyBot(twitch.Bot):
 
     self.logger.debug('Initialized with nick %s.' % nickname)
 
-    self.config = None
+    self.config : dict = None
     self.load_config(path + "/config.json")
     if self.config is None:
       self.logger.critical("Bot can not run without valid config.")
       raise RuntimeError()
-    self.user_data = {} # TODO: FIX: This should be separated into the different channels
+    self.user_data : dict = {} # TODO: FIX: This should be separated into the different channels
 
     # Ignored users
-    self.ignored_users = []
+    self.ignored_users : list[str] = []
     if os.path.exists(path + "/ignored_users.txt"):
       self.logger.info("Loading ignored users list...")
       try:
@@ -135,7 +132,7 @@ class MyBot(twitch.Bot):
         self.logger.error("Failed to load ignored users list!")
 
     # Botlist
-    self.bots = []
+    self.bots : list[str] = []
     url = "https://api.twitchinsights.net/v1/bots/all"
     self.logger.info('Downloading bot list from "%s"...' % url)
     r = requests.get(url)
@@ -144,7 +141,7 @@ class MyBot(twitch.Bot):
     self.logger.info("Loaded %s bots." % len(self.bots))
     self.logger.info("Ready")
 
-  def load_config(self, path):
+  def load_config(self, path : str) -> None:
     self.logger.info('Loading config from "%s"' % path)
     try:
       with io.open(path, mode="r", encoding="utf-8") as f:
@@ -156,7 +153,7 @@ class MyBot(twitch.Bot):
     self.logger.debug("Successfully loaded config.")
     self.config = config
 
-  def load_user(self, chatter):
+  def load_user(self, chatter : twitch.Chatter) -> Userdata:
     if not chatter.id in self.user_data:
       path = "./data/users/%s.json" % chatter.id
       self.logger.debug('Loading userdata from "%s"' % path)
@@ -175,7 +172,7 @@ class MyBot(twitch.Bot):
       self.user_data[chatter.id] = data
     return self.user_data[chatter.id]
 
-  def save_user(self, user):
+  def save_user(self, user : Union[Userdata, int]) -> None:
     if isinstance(user, int):
       if user in self.user_data:
         return
@@ -194,15 +191,13 @@ class MyBot(twitch.Bot):
     except:  # TODO: FIX
       self.logger.warning('Failed to write userdata to "%s"' % path)
 
-
-  def get_tiered_moderation_action(self, msg, actions, count=1):
+  def get_tiered_moderation_action(self, msg : twitch.Message, actions : dict, count : int = 1) -> ModerationAction:
     best = None
     for action in actions:
       if best is None or count >= action["count"] > best["count"]:
         best = action
     if best is None:
       return
-
 
     relative_count = count - best["count"]
 
@@ -250,7 +245,7 @@ class MyBot(twitch.Bot):
 
     return moderation_action
 
-  def mod_caps(self, msg):
+  def mod_caps(self, msg : twitch.Message) -> bool:
     config = self.config["caps"]
 
     num_caps = 0
@@ -270,11 +265,11 @@ class MyBot(twitch.Bot):
 
     return False
 
-  def mod_length(self, msg):
+  def mod_length(self, msg : twitch.Message) -> bool:
     config = self.config["length"]
     return len(msg.text) > config["max"]
 
-  def mod_links(self, msg):
+  def mod_links(self, msg : twitch.Message) -> bool:
     # TODO: Allow specific domains and paths
 
     # findall() has been used with valid conditions for urls in string
@@ -283,10 +278,10 @@ class MyBot(twitch.Bot):
 
     return len(urls) > 0
 
-  def mod_me(self, msg):
+  def mod_me(self, msg : twitch.Message) -> bool:
     return msg.text.startswith('ACTION ') and msg.text.endswith('')
 
-  def moderation_helper(self, msg, function, mod_tool_name, most_appropriate_mod_action):
+  def moderation_helper(self, msg : twitch.Message, function, mod_tool_name : str, current_action : ModerationAction) -> ModerationAction:
     if function(msg):
       userdata = self.load_user(msg.author)
       view = userdata.view("moderation.%s" % mod_tool_name)
@@ -296,11 +291,11 @@ class MyBot(twitch.Bot):
       self.save_user(userdata)
       action = self.get_tiered_moderation_action(msg, self.config[mod_tool_name]["actions"], view.get("count", 1))
 
-      if action > most_appropriate_mod_action:
+      if action > current_action:
         return action
-    return most_appropriate_mod_action
+    return current_action
 
-  def moderate(self, msg):
+  def moderate(self, msg : twitch.Message) -> None:
     # Ignore Twitch Staff, Broadcasters and Moderators
     if msg.author.has_type(twitch.UserType.Broadcaster) or \
       msg.author.has_type(twitch.UserType.Twitch) or \
@@ -340,7 +335,7 @@ class MyBot(twitch.Bot):
 
     action.invoke(msg)
 
-  def on_command(self, msg, cmd, args, userdata):
+  def on_command(self, msg : twitch.Message, cmd : str, args : list[str]) -> None:
     self.logger.debug("on_command(%s, %s, %s)" % (msg.channel.name, cmd, args))
 
     # Utility
@@ -378,7 +373,7 @@ class MyBot(twitch.Bot):
 
     # TODO: Custom commands
 
-  def on_message(self, msg):
+  def on_message(self, msg : twitch.Message):
     self.logger.debug('on_message(%s, %s, "%s")' % (msg.channel.name, msg.author.display_name, msg.text))
 
     # Ignore self (echo)
@@ -420,13 +415,13 @@ class MyBot(twitch.Bot):
   def on_connect(self):
     self.logger.debug("(Re)connected to twitch chat servers.")
 
-  def on_channel_join(self, channel):
+  def on_channel_join(self, channel : twitch.Channel):
     self.logger.info("Joined channel %s" % channel.name)
 
-  def on_channel_part(self, channel):
+  def on_channel_part(self, channel : twitch.Channel):
     self.logger.info("Parted from channel %s" % channel.name)
 
-  def on_error(self, error):
+  def on_error(self, error : str):
     self.logger.error(error)
 
 if __name__ == '__main__':

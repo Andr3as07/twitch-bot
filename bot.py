@@ -1,5 +1,7 @@
+from __future__ import annotations
 from dotenv import load_dotenv
 from enum import IntFlag, unique
+from typing import Union
 from time import sleep
 import socket
 import os
@@ -47,7 +49,7 @@ class Bot:
 
     self.on_connect()
 
-  def join_channel(self, name):
+  def join_channel(self, name : str):
     name = name.removeprefix('#').lower()
     if not name in self._channels:
       self._socket.send("JOIN #{}\r\n".format(name).encode("utf-8")) # TODO: Move to join_channel
@@ -57,21 +59,22 @@ class Bot:
 
     return self._channels[name]
 
-  def part_channel(self, channel):
+  def part_channel(self, channel : Union[str, Channel]) -> bool:
     if not channel.name in self._channels:
-      return
+      return False
     self.on_channel_part(channel)
     self._channels.pop(channel.name)
     self.send("PART %s" % channel.name)
+    return True
 
-  def send(self, content):
+  def send(self, content : str) -> None:
     self._socket.send("{}\r\n".format(content).encode("utf-8"))
 
-  def chat(self, channel_name, text):
+  def chat(self, channel_name : str, text : str) -> None:
     self.send("PRIVMSG #%s :%s" % (channel_name, text))
 
-  def _parse_tags(self, tags_str):
-    tags = {}
+  def _parse_tags(self, tags_str : str) -> list[str]:
+    tags : dict = {}
     tags_parts = tags_str.split(';')
 
     for tags_part in tags_parts:
@@ -86,14 +89,14 @@ class Bot:
 
     return tags
 
-  def _handle_message(self, match):
+  def _handle_message(self, match) -> None:
     tags_str = match[1]
     username = match[2]
-    channelname = match[3]
+    channel_name = match[3]
     text = match[4].strip()
-    if not channelname in self._channels:
+    if not channel_name in self._channels:
       return
-    channel = self._channels[channelname]
+    channel = self._channels[channel_name]
     tags = self._parse_tags(tags_str)
     channel.handle_message(username, text, tags)
 
@@ -113,7 +116,7 @@ class Bot:
     channel = self._channels[channelname]
     channel.handle_part(username)
 
-  def _read_line(self):
+  def _read_line(self) -> str:
     if len(self._back_buffer) == 0 or (len(self._back_buffer) == 1 and not self._back_buffer[0].endswith(b'\n')):
       buffer = self._socket.recv(1024)
       self._back_buffer = buffer.split(b'\r\n')
@@ -153,37 +156,37 @@ class Bot:
   def on_destruct(self):
     pass
 
-  def on_raw_data(self, data):
+  def on_raw_data(self, data : str):
     pass
 
-  def on_error(self, error):
+  def on_error(self, error : str):
     pass
 
   def on_connect(self):
     pass
 
-  def on_channel_join(self, channel):
+  def on_channel_join(self, channel : Channel):
     pass
 
-  def on_channel_part(self, channel):
+  def on_channel_part(self, channel : Channel):
     pass
 
-  def on_join(self, join_event):
+  def on_join(self, join_event : ChatEvent):
     pass
 
-  def on_part(self, part_event):
+  def on_part(self, part_event : ChatEvent):
     pass
 
-  def on_message(self, msg):
+  def on_message(self, msg : Message):
     pass
 
-def _update_chatter_type_enum(chatter, type, value):
+def _update_chatter_type_enum(chatter : Chatter, chatter_type : UserType, value : bool) -> None:
   if value:
-    chatter.type |= type
+    chatter.type |= chatter_type
   else:
-    chatter.type &= ~type
+    chatter.type &= ~chatter_type
 
-def _update_chatter_tags(chatter, tags):
+def _update_chatter_tags(chatter : Chatter, tags : dict[str, str]) -> None:
   if "display-name" in tags:
     chatter._display = tags["display-name"]
   if "user-id" in tags:
@@ -201,18 +204,18 @@ def _update_chatter_tags(chatter, tags):
       _update_chatter_type_enum(chatter, UserType.Moderator)
 
 class Channel:
-  def __init__(self, connection, name):
+  def __init__(self, connection : bot, name : str):
     self._connection = connection
     self.name = name
     self._chatters = {}
 
-  def leave(self):
+  def leave(self) -> None:
     self._connection.leave_channel(self)
 
-  def chat(self, text):
+  def chat(self, text : str) -> None:
     self._connection.chat(self.name, text)
 
-  def ban(self, user, reason=None):
+  def ban(self, user : Union[Chatter, str], reason : str = None) -> None:
     if isinstance(user, Chatter):
       user = user.name
 
@@ -221,7 +224,7 @@ class Channel:
     else:
       self.chat(".ban %s %s" % (user, reason))
 
-  def timeout(self, user, time, reason=None):
+  def timeout(self, user : Union[Chatter, str], time : int, reason : str = None):
     if isinstance(user, Chatter):
       user = user.name
 
@@ -236,12 +239,12 @@ class Channel:
   def clear(self):
     self.chat(".clear")
 
-  def get_chatter(self, user_name):
+  def get_chatter(self, user_name : str) -> Chatter:
     if user_name in self._chatters:
       return self._chatters[user_name]
     return None
 
-  def handle_message(self, author_name, text, tags):
+  def handle_message(self, author_name : str, text : str, tags : str):
     chatter = self.get_chatter(author_name)
     if chatter is None:
       chatter = Chatter(self, author_name)
@@ -256,14 +259,14 @@ class Channel:
 
     self._connection.on_message(msg)
 
-  def handle_join(self, name):
+  def handle_join(self, name : str):
     chatter = self.get_chatter(name)
     if chatter is None:
       chatter = Chatter(self, name)
       self._chatters[name] = chatter
     self._connection.on_join(ChatEvent(self, chatter))
 
-  def handle_part(self, name):
+  def handle_part(self, name : str):
     chatter = self.get_chatter(name)
     if chatter is None:
       chatter = Chatter(self, name)
@@ -277,26 +280,26 @@ class Channel:
     return str(self)
 
 class Chatter:
-  def __init__(self, channel, name):
-    self.channel = channel
-    self.name = name
-    self._display = None
-    self.id = None
-    self.type = UserType.Unknown
+  def __init__(self, channel : Channel, name : str):
+    self.channel : Channel = channel
+    self.name : str = name
+    self._display : str = None
+    self.id : int = None
+    self.type : UserType = UserType.Unknown
 
-  def has_type(self, other):
+  def has_type(self, other : UserType) -> bool:
     return (int(self.type) & ~other) != 0
 
   @property
-  def display_name(self):
+  def display_name(self) -> str:
     if self._display is not None:
       return self._display
     return self.name
 
-  def timeout(self, time, reason = None):
+  def timeout(self, time : int, reason : str = None):
     self.channel.timeout(self, time, reason)
 
-  def ban(self, reason = None):
+  def ban(self, reason : str = None):
     self.channel.ban(self, reason)
 
   def __str__(self):
@@ -306,7 +309,7 @@ class Chatter:
     return str(self)
 
 class Message:
-  def __init__(self, channel, author, text, tags):
+  def __init__(self, channel : Channel, author : Chatter, text : str, tags : dict[str, str]):
     self.timestamp = time.time()
     self.channel = channel
     self.author = author
@@ -314,13 +317,13 @@ class Message:
     self.tags = tags
     self.id = None
 
-  def delete(self):
+  def delete(self) -> None:
     self.channel.chat(".delete %s" % self.id)
 
 class ChatEvent:
-  def __init__(self, channel, user):
+  def __init__(self, channel : Channel, chatter : Chatter):
     self.channel = channel
-    self.user = user
+    self.user = chatter
 
 if __name__ == '__main__':
   load_dotenv()
