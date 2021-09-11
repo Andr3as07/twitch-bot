@@ -1,12 +1,13 @@
 from __future__ import annotations
-from typing import Any, Union
+
+import importlib
+import sys
 import logging
-from enum import IntEnum
-from functools import total_ordering
+from datetime import time
 
 from dotenv import load_dotenv
-import time
-import bot as twitch
+
+import libtwitch
 from userdata import *
 import requests
 import random
@@ -14,65 +15,6 @@ import json
 import os
 import re
 import io
-
-class ModerationActionType(IntEnum):
-  Nothing = 0
-  RemoveMessage = 1
-  Timeout = 2
-  Ban = 3
-
-@total_ordering
-class ModerationAction:
-  def __init__(self, action : ModerationActionType, duration : int = 0, reason : str = None, response : str = None):
-    self.action : ModerationActionType = action
-    self.reason : str = reason
-    self.response : str = response
-    self.duration : int = duration
-
-  def invoke(self, message : twitch.Message) -> None:
-    # Respond if we have a response
-    if self.response is not None:
-      message.channel.chat(self.response)
-
-    # Perform the actual moderation action
-    if self.action == ModerationActionType.Nothing:
-      return True # Do nothing
-    elif self.action == ModerationActionType.RemoveMessage:
-      message.delete()
-    elif self.action == ModerationActionType.Timeout:
-      message.author.timeout(self.duration, self.reason)
-      return True
-    elif self.action == ModerationActionType.Ban:
-      message.author.ban(self.reason)
-      return True
-
-    return False
-
-  def __eq__(self, other : ModerationAction) -> bool:
-    if self.action == other.action:
-      if self.action == ModerationActionType.Timeout:
-        return self.duration == other.duration
-      return True
-    return False
-
-  def __ne__(self, other : ModerationAction) -> bool:
-    return not (self == other)
-
-  def __lt__(self, other : ModerationAction) -> bool:
-    if self.action < other.action:
-      return True
-
-    if self.action == other.action and self.action == ModerationActionType.Timeout:
-      if self.duration < other.duration:
-        return True
-
-    if self.reason is None and other.reason is not None:
-      return True
-
-    if self.response is None and other.response is not None:
-      return True
-
-    return False
 
 def substitute_variables(text : str, data : dict[str, Any]) -> str:
   if not "{" in text:
@@ -99,7 +41,7 @@ def substitute_variables(text : str, data : dict[str, Any]) -> str:
 
   return result
 
-class MyBot(twitch.Bot):
+class MyBot(libtwitch.Bot):
   def __init__(self, nickname : str, token : str, path : str):
     super().__init__(nickname, token)
     self.logger : logging.Logger = logging.getLogger('bot')
@@ -141,7 +83,85 @@ class MyBot(twitch.Bot):
     self.logger.info("Loaded %s bots." % len(self.bots))
     self.logger.info("Ready")
 
-  def load_config(self, path : str) -> None:
+    self._extensions = {}
+    self._cogs : dict[str, libtwitch.Cog] = {}
+
+  def add_cog(self, name : str, cog : libtwitch.Cog):
+    if not isinstance(cog, libtwitch.Cog):
+      return False # cogs must derive from Cog
+
+    self._cogs[name] = cog
+
+  def get_cog(self, name : str):
+    return self._cogs.get(name)
+
+  def remove_cog(self, name):
+    cog = self._cogs.pop(name, None)
+    return cog is not None
+
+  def _cog_event(self, event : libtwitch.CogEvent, *args, **kwargs):
+    for cog in self._cogs:
+      self._cogs[cog].invoke(event, *args, **kwargs)
+
+  def load_extension(self, path):
+    try:
+      name = importlib.util.resolve_name(path, None)
+    except ImportError:
+      return False # Extension not found
+
+    if name in self._extensions:
+      return False # Already loaded
+
+    spec = importlib.util.find_spec(name)
+    if spec is None:
+      return False # Extension not found
+
+    lib = importlib.util.module_from_spec(spec)
+    sys.modules[name] = lib
+    try:
+      spec.loader.exec_module(lib)
+    except Exception as ex:
+      del sys.modules[name]
+      return False # Failed to load extension
+
+    try:
+      setup = getattr(lib, 'setup')
+    except AttributeError:
+      del sys.modules[name]
+      return # Entry point not found
+
+    try:
+      setup(self)
+    except Exception as ex:
+      del sys.modules[name]
+      # self._remove_module_references(lib.__name__)
+      self._call_extension_finalizer(lib, name)
+      return False # Error while calling extension entry point
+    else:
+      self._extensions[name] = lib
+
+  def _call_extension_finalizer(self, lib, key):
+    try:
+      func = getattr(lib, 'teardown')
+    except AttributeError:
+      pass # We don't have a teardown function, that is ok
+    else:
+      try:
+        func(self)
+      except Exception:
+        pass
+    finally:
+      self._extensions.pop(key, None)
+      sys.modules.pop(key, None)
+      name = lib.__name__
+      for module in list(sys.modules.keys()):
+        if name == module or module.startswith(name + "."):
+          del sys.modules[module]
+
+  def unload_extension(self, name):
+    print("TODO: unload_extension")
+
+  def load_config(self, path : str) -> bool:
     self.logger.info('Loading config from "%s"' % path)
     try:
       with io.open(path, mode="r", encoding="utf-8") as f:
@@ -152,8 +172,9 @@ class MyBot(twitch.Bot):
 
     self.logger.debug("Successfully loaded config.")
     self.config = config
+    return True
 
-  def load_user(self, chatter : twitch.Chatter) -> Userdata:
+  def load_user(self, chatter : libtwitch.Chatter) -> Userdata:
     if not chatter.id in self.user_data:
       path = "./data/users/%s.json" % chatter.id
       self.logger.debug('Loading userdata from "%s"' % path)
@@ -191,13 +212,14 @@ class MyBot(twitch.Bot):
     except:  # TODO: FIX
       self.logger.warning('Failed to write userdata to "%s"' % path)
 
-  def get_tiered_moderation_action(self, msg : twitch.Message, actions : dict, count : int = 1) -> ModerationAction:
+  def get_tiered_moderation_action(self, msg : libtwitch.Message, actions : dict, count : int = 1) -> libtwitch.ModerationAction:
+    moderation_action = libtwitch.ModerationAction(libtwitch.ModerationActionType.Nothing)
     best = None
     for action in actions:
       if best is None or count >= action["count"] > best["count"]:
         best = action
     if best is None:
-      return
+      return moderation_action
 
     relative_count = count - best["count"]
 
@@ -205,14 +227,13 @@ class MyBot(twitch.Bot):
     mod_action_type = mod_action["type"]
 
     # Get appropriate moderation action
-    moderation_action = ModerationAction(ModerationActionType.Nothing)
     if "reason" in mod_action:
       moderation_action.reason = mod_action["reason"]
 
     if mod_action_type == "nothing":
-      moderation_action.action = ModerationActionType.Nothing
+      moderation_action.action = libtwitch.ModerationActionType.Nothing
     elif mod_action_type == "remove_message":
-      moderation_action.action = ModerationActionType.RemoveMessage
+      moderation_action.action = libtwitch.ModerationActionType.RemoveMessage
     elif mod_action_type == "timeout":
       # Calculate timeout duration
       # t = a*x^2 + b*x + c
@@ -227,10 +248,10 @@ class MyBot(twitch.Bot):
         quadratic = mod_action["quadratic"]
       duration = (quadratic * relative_count * relative_count) + (linear * relative_count) + constant
 
-      moderation_action.action = ModerationActionType.Timeout
+      moderation_action.action = libtwitch.ModerationActionType.Timeout
       moderation_action.duration = duration
     elif mod_action_type == "ban":
-      moderation_action.action = ModerationActionType.Ban
+      moderation_action.action = libtwitch.ModerationActionType.Ban
     else:
       self.logger.warning("Unknown mod action: %s" % mod_action_type)
 
@@ -245,7 +266,7 @@ class MyBot(twitch.Bot):
 
     return moderation_action
 
-  def mod_caps(self, msg : twitch.Message) -> bool:
+  def mod_caps(self, msg : libtwitch.Message) -> bool:
     config = self.config["caps"]
 
     num_caps = 0
@@ -265,11 +286,11 @@ class MyBot(twitch.Bot):
 
     return False
 
-  def mod_length(self, msg : twitch.Message) -> bool:
+  def mod_length(self, msg : libtwitch.Message) -> bool:
     config = self.config["length"]
     return len(msg.text) > config["max"]
 
-  def mod_links(self, msg : twitch.Message) -> bool:
+  def mod_links(self, msg : libtwitch.Message) -> bool:
     # TODO: Allow specific domains and paths
 
     # findall() has been used with valid conditions for urls in string
@@ -278,10 +299,10 @@ class MyBot(twitch.Bot):
 
     return len(urls) > 0
 
-  def mod_me(self, msg : twitch.Message) -> bool:
+  def mod_me(self, msg : libtwitch.Message) -> bool:
     return msg.text.startswith('ACTION ') and msg.text.endswith('')
 
-  def moderation_helper(self, msg : twitch.Message, function, mod_tool_name : str, current_action : ModerationAction) -> ModerationAction:
+  def moderation_helper(self, msg : libtwitch.Message, function, mod_tool_name : str, current_action : libtwitch.ModerationAction) -> libtwitch.ModerationAction:
     if function(msg):
       userdata = self.load_user(msg.author)
       view = userdata.view("moderation.%s" % mod_tool_name)
@@ -295,11 +316,11 @@ class MyBot(twitch.Bot):
         return action
     return current_action
 
-  def moderate(self, msg : twitch.Message) -> None:
+  def moderate(self, msg : libtwitch.Message) -> None:
     # Ignore Twitch Staff, Broadcasters and Moderators
-    if msg.author.has_type(twitch.UserType.Broadcaster) or \
-      msg.author.has_type(twitch.UserType.Twitch) or \
-      msg.author.has_type(twitch.UserType.Moderator):
+    if msg.author.has_type(libtwitch.UserType.Broadcaster) or \
+      msg.author.has_type(libtwitch.UserType.Twitch) or \
+      msg.author.has_type(libtwitch.UserType.Moderator):
       return
 
     userdata = self.load_user(msg.author)
@@ -307,7 +328,7 @@ class MyBot(twitch.Bot):
     # TODO: Find a way to only apply the most severe punishment and not multiple
     # TODO: Ignore specific users or groups
 
-    action = ModerationAction(ModerationActionType.Nothing)
+    action = libtwitch.ModerationAction(libtwitch.ModerationActionType.Nothing)
 
     # Caps "THIS IS A SHOUTED MESSAGE"
     action = self.moderation_helper(msg, self.mod_caps, "caps", action)
@@ -335,8 +356,14 @@ class MyBot(twitch.Bot):
 
     action.invoke(msg)
 
-  def on_command(self, msg : twitch.Message, cmd : str, args : list[str]) -> None:
+  def on_command(self, msg : libtwitch.Message, cmd : str, args : list[str]) -> None:
     self.logger.debug("on_command(%s, %s, %s)" % (msg.channel.name, cmd, args))
+
+    for cog in self._cogs:
+      if self._cogs[cog].on_command(msg, cmd, args):
+        return
+
+    self._cog_event(libtwitch.CogEvent.Command, msg, cmd, args)
 
     # Utility
     # TODO: Help (!help, !commands)
@@ -373,7 +400,7 @@ class MyBot(twitch.Bot):
 
     # TODO: Custom commands
 
-  def on_message(self, msg : twitch.Message):
+  def on_message(self, msg : libtwitch.Message):
     self.logger.debug('on_message(%s, %s, "%s")' % (msg.channel.name, msg.author.display_name, msg.text))
 
     # Ignore self (echo)
@@ -415,10 +442,10 @@ class MyBot(twitch.Bot):
   def on_connect(self):
     self.logger.debug("(Re)connected to twitch chat servers.")
 
-  def on_channel_join(self, channel : twitch.Channel):
+  def on_channel_join(self, channel : libtwitch.Channel):
     self.logger.info("Joined channel %s" % channel.name)
 
-  def on_channel_part(self, channel : twitch.Channel):
+  def on_channel_part(self, channel : libtwitch.Channel):
     self.logger.info("Parted from channel %s" % channel.name)
 
   def on_error(self, error : str):
@@ -427,6 +454,7 @@ class MyBot(twitch.Bot):
 if __name__ == '__main__':
   load_dotenv()
   bot = MyBot("whyamitalking", os.getenv('CHAT_TOKEN'), "./config")
+  bot.load_extension("cogs.Example")
   bot.connect()
   channel = bot.join_channel("Andr3as07")
   bot.run()
