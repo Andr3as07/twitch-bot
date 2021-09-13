@@ -165,7 +165,6 @@ class Connection:
       # TODO: Maybe this could lead to a race condition?
       item = self._egress_queue.get()
       with self._egress_queue_lock:
-        print("< " + item)
         self._socket.send("{}\r\n".format(item).encode("utf-8"))
         self._egress_queue.task_done()
       sleep(1 / self.rate)
