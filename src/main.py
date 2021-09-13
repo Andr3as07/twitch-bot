@@ -361,10 +361,10 @@ class MyBot(libtwitch.Bot):
 
 if __name__ == '__main__':
   load_dotenv()
-  bot = MyBot("whyamitalking", os.getenv('CHAT_TOKEN'), "config")
+  bot = MyBot(os.getenv('NICKNAME'), os.getenv('CHAT_TOKEN'), "config")
   bot.load_extension("cogs.Example")
   bot.connect()
-  channel = bot.join_channel("Andr3as07")
+  channel = bot.join_channel(os.getenv('CHANNEL'))
   bot.start(libtwitch.RATE_MODERATOR)
 
   print("Shutting down...")
