@@ -82,6 +82,7 @@ class Connection:
     return True
 
   def send(self, content : str) -> None:
+    self.on_raw_egress(content)
     with self._egress_queue_lock:
       self._egress_queue.put(content)
 
@@ -113,7 +114,7 @@ class Connection:
       return
     channel = self._channels[channel_name]
     tags = self._parse_tags(tags_str)
-    channel.handle_message(username, text, tags)
+    channel.handle_privmsg(username, text, tags)
 
   def _handle_join(self, match):
     username = match[1]
@@ -141,24 +142,26 @@ class Connection:
     return line.decode("utf-8")
 
   def _ingress_thread_func(self):
+    # TODO: Error
     while self._running:
       response = self._read_line()
-      self.on_raw_data(response)
+      self.on_raw_ingress(response)
+      message_match = re.match(RE_CHAT_MSG, response)
       if response == "PING :tmi.twitch.tv": # On Ping
         self.send("PONG :tmi.twitch.tv")
-      else: # Other Message
-        message_match = re.match(RE_CHAT_MSG, response)
-        if message_match is not None: # On Message
-          self._handle_message(message_match)
-        else: # Unknown message
-          join_match = re.match(RE_JOIN, response)
-          part_match = re.match(RE_PART, response)
-          if join_match is not None: # On Join
-            self._handle_join(join_match)
-          elif part_match is not None: # On Part
-            self._handle_part(part_match)
-          else:
-            self.on_error(response)
+        continue
+      self.on_raw_ingress(response)
+      if message_match is not None: # On Message
+        self._handle_message(message_match)
+      else: # Other message
+        join_match = re.match(RE_JOIN, response)
+        part_match = re.match(RE_PART, response)
+        if join_match is not None: # On Join
+          self._handle_join(join_match)
+        elif part_match is not None: # On Part
+          self._handle_part(part_match)
+        else:
+          self.on_unknown(response)
 
   def _egress_thread_func(self):
     while self._running:
@@ -194,13 +197,22 @@ class Connection:
   def on_destruct(self):
     pass
 
-  def on_raw_data(self, data : str):
+  def on_raw_ingress(self, data : str):
+    pass
+
+  def on_raw_egress(self, data : str):
     pass
 
   def on_error(self, error : str):
     pass
 
+  def on_unknown(self, data : str):
+    pass
+
   def on_connect(self):
+    pass
+
+  def on_disconnect(self):
     pass
 
   def on_channel_join(self, channel : Channel):
@@ -215,7 +227,7 @@ class Connection:
   def on_part(self, part_event : ChatEvent):
     pass
 
-  def on_message(self, msg : Message):
+  def on_privmsg(self, msg : Message):
     pass
 
 def _update_chatter_type_enum(chatter : Chatter, chatter_type : ChatterType, value : bool) -> None:
@@ -282,7 +294,7 @@ class Channel:
       return self._chatters[user_name]
     return None
 
-  def handle_message(self, author_name : str, text : str, tags : str):
+  def handle_privmsg(self, author_name : str, text : str, tags : str):
     chatter = self.get_chatter(author_name)
     if chatter is None:
       chatter = Chatter(self, author_name)
@@ -295,7 +307,7 @@ class Channel:
     if "id" in tags:
       msg.id = tags["id"]
 
-    self._connection.on_message(msg)
+    self._connection.on_privmsg(msg)
 
   def handle_join(self, name : str):
     chatter = self.get_chatter(name)

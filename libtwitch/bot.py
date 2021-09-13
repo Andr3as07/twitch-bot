@@ -1,5 +1,6 @@
 import importlib
 import sys
+from typing import Any
 
 import libtwitch
 
@@ -7,37 +8,40 @@ class Bot(libtwitch.Connection):
   def __init__(self, nickname : str, token : str):
     super().__init__(nickname, token)
 
-    self._extensions = {}
-    self._cogs : dict[str, libtwitch.Cog] = {}
+    self._extensions : dict[str, Any] = {}
+    self.plugins : dict[str, libtwitch.Plugin] = {}
 
-  def add_cog(self, name : str, cog : libtwitch.Cog):
-    if not isinstance(cog, libtwitch.Cog):
-      return False # cogs must derive from Cog
+  def register_plugin(self, plugin : libtwitch.Plugin):
+    if not isinstance(plugin, libtwitch.Plugin):
+      return False # plugins must derive from Plugin
 
-    self._cogs[name] = cog
-    cog.invoke(libtwitch.CogEvent.SelfLoad)
+    name = plugin.get_name()
+    self.plugins[name] = plugin
+    plugin.on_event(libtwitch.PluginEvent.SelfLoad)
 
-    for other_cog_name in self._cogs: # Inform all other cogs
-      if other_cog_name == name:
+    for other_plugin_name in self.plugins: # Inform all other plugins
+      if other_plugin_name == name:
         continue
-      self._cog_event(libtwitch.CogEvent.CogLoad, name) # Inform the cog of it's own loading
+      self._on_event(libtwitch.PluginEvent.CogLoad, name) # Inform the cog of it's own loading
 
-  def get_cog(self, name : str):
-    return self._cogs.get(name)
+  def get_plugin(self, name : str):
+    return self.plugins.get(name)
 
-  def remove_cog(self, name : str):
-    cog = self._cogs.pop(name, None)
-    if cog is None:
+  def unregister_plugin(self, name : str):
+    plugin = self.plugins.pop(name, None)
+    if plugin is None:
       return
 
-    cog.invoke(libtwitch.CogEvent.SelfUnload) # Inform the cog of it's own unloading
-    self._cog_event(libtwitch.CogEvent.CogUnload, name) # Inform all other cogs
+    plugin.on_event(libtwitch.PluginEvent.SelfUnload) # Inform the plugin of it's own unloading
+    self._on_event(libtwitch.PluginEvent.PluginUnload, name) # Inform all other plugins
 
-  def _cog_event(self, event : libtwitch.CogEvent, *args, **kwargs):
-    for cog in self._cogs:
-      self._cogs[cog].invoke(event, *args, **kwargs)
+  def _on_event(self, event : libtwitch.PluginEvent, *args, **kwargs):
+    for extension in self.plugins:
+      self.plugins[extension].on_event(event, *args, **kwargs)
 
-  def load_extension(self, path):
+  def load_extension(self, path : str):
+    path = "extensions." + path
+
     try:
       name = importlib.util.resolve_name(path, None)
     except ImportError:
@@ -74,6 +78,20 @@ class Bot(libtwitch.Connection):
     else:
       self._extensions[name] = lib
 
+  def unload_extension(self, path):
+    path = "extensions." + path
+
+    try:
+      name = importlib.util.resolve_name(path, None)
+    except ImportError:
+      return False # Extension not found
+
+    lib = self._extensions.get(name)
+    if lib is None:
+      return False # Extension not loaded
+
+    self._call_extension_finalizer(lib, name)
+
   def _call_extension_finalizer(self, lib, key):
     try:
       func = getattr(lib, 'teardown')
@@ -92,53 +110,80 @@ class Bot(libtwitch.Connection):
         if name == module or module.startswith(name + "."):
           del sys.modules[module]
 
-  def unload_extension(self, path):
-    try:
-      name = importlib.util.resolve_name(path, None)
-    except ImportError:
-      return False # Extension not found
+  def on_ready(self):
+    pass
 
-    lib = self._extensions.get(name)
-    if lib is None:
-      return False # Extension not loaded
+  def on_destruct(self):
+    # Let the cogs know that the bot is being destroyed
+    self._on_event(libtwitch.PluginEvent.Destruct)
 
-    self._call_extension_finalizer(lib, name)
+    # Unload all extensions
+    for extension in self._extensions:
+      self.unload_extension(extension)
 
-  def on_message(self, msg : libtwitch.Message):
-    # Ignore self (echo)
-    if msg.author.name.strip().lower() == self.nickname:
-      return
+    # Unload all plugins
+    # Note plugins should be unregistered in the extensions teardown function.
+    for plugin_name in self._plugins:
+      self.unregister_plugin(plugin_name)
 
-    # Commands must start with this prefix
+  def on_raw_ingress(self, data : str):
+    self._on_event(libtwitch.PluginEvent.Message.RawIngress, data)
+
+  def on_raw_egress(self, data : str):
+    self._on_event(libtwitch.PluginEvent.Message.RawEgress, data)
+
+  def on_error(self, error : str):
+    self._on_event(libtwitch.PluginEvent.Message.Error, error)
+
+  def on_unknown(self, data : str):
+    self._on_event(libtwitch.PluginEvent.Message.Unknown, data)
+
+  def on_connect(self):
+    self._on_event(libtwitch.PluginEvent.Message.Connect)
+
+  def on_disconnect(self):
+    self._on_event(libtwitch.PluginEvent.Message.Disconnect)
+
+  def on_channel_join(self, channel : libtwitch.Channel):
+    self._on_event(libtwitch.PluginEvent.Message.ChannelJoin, channel)
+
+  def on_channel_part(self, channel : libtwitch.Channel):
+    self._on_event(libtwitch.PluginEvent.Message.ChannelPart, channel)
+
+  def on_join(self, join_event : libtwitch.ChatEvent):
+    self._on_event(libtwitch.PluginEvent.Message.ChatterJoin, join_event)
+
+  def on_part(self, part_event : libtwitch.ChatEvent):
+    self._on_event(libtwitch.PluginEvent.Message.ChatterPart, part_event)
+
+  def _handle_command(self, msg : libtwitch.Message):
     if not msg.text.startswith('?'):
-      return
+      return False
 
-    # Commands must contain at least the command name
     args = msg.text.strip().split(' ')
     if len(args) == 0:
-      return
+      return False
     elif len(args[0]) == 1:
-      return
+      return False
 
     # The command name is up to the first space.
     # Anything after that is a space separated list of arguments
     cmd = args[0][1:]
     args.pop(0)
 
-    self.on_command(msg, cmd, args)
+    self._on_event(libtwitch.PluginEvent.Command, msg, cmd, args)
+    return True
 
-  def on_command(self, msg : libtwitch.Message, cmd : str, args : list[str]) -> None:
-    for cog in self._cogs:
-      if self._cogs[cog].on_command(msg, cmd, args):
-        return True
+  def on_privmsg(self, msg : libtwitch.Message):
+    # Ignore self (echo)
+    if msg.author.name.strip().lower() == self.nickname:
+      return
 
-    self._cog_event(libtwitch.CogEvent.Command, msg, cmd, args)
-    return False
+    self._on_event(libtwitch.PluginEvent.Message.Privmsg, msg)
 
-  def on_destruct(self):
-    # Let the cogs know that the bot is being destroyed
-    self._cog_event(libtwitch.CogEvent.Destruct)
+    # Handle command
+    if self._handle_command(msg):
+      return
 
-    # Unload all extensions
-    for extension in self._extensions:
-      self.unload_extension(extension)
+    # This is a normal message
+    self._on_event(libtwitch.PluginEvent.Message.Message, msg)
