@@ -22,7 +22,7 @@ class Bot(libtwitch.Connection):
     for other_plugin_name in self.plugins: # Inform all other plugins
       if other_plugin_name == name:
         continue
-      self._on_event(libtwitch.PluginEvent.CogLoad, name) # Inform the cog of it's own loading
+      self._on_event(libtwitch.PluginEvent.PluginLoad, name) # Inform the cog of it's own loading
 
   def get_plugin(self, name : str):
     return self.plugins.get(name)
@@ -36,8 +36,8 @@ class Bot(libtwitch.Connection):
     self._on_event(libtwitch.PluginEvent.PluginUnload, name) # Inform all other plugins
 
   def _on_event(self, event : libtwitch.PluginEvent, *args, **kwargs):
-    for extension in self.plugins:
-      self.plugins[extension].on_event(event, *args, **kwargs)
+    for plugin_name in self.plugins:
+      self.plugins[plugin_name].on_event(event, *args, **kwargs)
 
   def load_extension(self, path : str):
     path = "extensions." + path
@@ -187,3 +187,9 @@ class Bot(libtwitch.Connection):
 
     # This is a normal message
     self._on_event(libtwitch.PluginEvent.Message.Message, msg)
+
+  def get_config_dir(self):
+    return "./config"
+
+  def get_data_dir(self):
+    return "./data"

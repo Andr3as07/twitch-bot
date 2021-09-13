@@ -86,9 +86,9 @@ class Plugin:
     elif plugin_event == PluginEvent.SelfUnload:
       self.on_unload()
     elif plugin_event == PluginEvent.PluginLoad:
-      self.on_plugin_load(*args[0])
+      self.on_plugin_load(args[0])
     elif plugin_event == PluginEvent.PluginUnload:
-      self.on_unload(*args[0])
+      self.on_unload(args[0])
     else:
       print("ERROR: Unhandled event %s" % plugin_event)
 
@@ -195,3 +195,9 @@ class Plugin:
     called when another plugin is being unloaded
     :param plugin_name: the name of the other plugin
     """
+
+  def get_config_dir(self):
+    return self.bot.get_config_dir() + "/" + self.get_name()
+
+  def get_data_dir(self):
+    return self.bot.get_data_dir() + "/" + self.get_name()
