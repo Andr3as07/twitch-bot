@@ -74,16 +74,6 @@ class MyBot(libtwitch.Bot):
       except:
         self.logger.error("Failed to load ignored users list!")
 
-    # Botlist
-    self.bots : list[str] = []
-    url = "https://api.twitchinsights.net/v1/bots/all"
-    self.logger.info('Downloading bot list from "%s"...' % url)
-    r = requests.get(url)
-    for bot in json.loads(r.text)["bots"]:
-      self.bots.append(bot[0])
-    self.logger.info("Loaded %s bots." % len(self.bots))
-    self.logger.info("Ready")
-
   def load_config(self, path : str) -> bool:
     self.logger.info('Loading config from "%s"' % path)
     try:
@@ -363,6 +353,7 @@ if __name__ == '__main__':
   load_dotenv()
   bot = MyBot(os.getenv('NICKNAME'), os.getenv('CHAT_TOKEN'), "config")
   bot.load_extension("8ball")
+  bot.load_extension("viewerlist_bot_remover")
   bot.connect()
   channel = bot.join_channel(os.getenv('CHANNEL'))
   bot.start(libtwitch.RATE_MODERATOR)

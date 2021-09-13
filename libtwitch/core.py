@@ -373,11 +373,4 @@ class Message:
 class ChatEvent:
   def __init__(self, channel : Channel, chatter : Chatter):
     self.channel = channel
-    self.user = chatter
-
-if __name__ == '__main__':
-  load_dotenv()
-  bot = Connection("whyamitalking", os.getenv('CHAT_TOKEN'))
-  bot.connect()
-  channel = bot.join_channel("Andr3as07")
-  bot.start()
+    self.chatter = chatter
