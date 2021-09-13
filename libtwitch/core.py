@@ -1,4 +1,8 @@
 from __future__ import annotations
+
+import threading
+from queue import Queue
+
 from dotenv import load_dotenv
 from enum import IntFlag, unique
 from typing import Union
@@ -10,7 +14,8 @@ import time
 
 HOST = "irc.twitch.tv"
 PORT = 6667
-RATE = 20 / 30  # messages per second
+RATE_USER = 20 / 30  # messages per second
+RATE_MODERATOR = 100 / 30  # messages per second
 
 RE_TAG_PART = r"(?:@([^\s=;]+=[^\s;]*(?:;(?:[^\s=;]+=[^\s;]*))*))?\s?"
 RE_CHAT_MSG = r"^%s:([^\s!]+)!(?:[^\s@]+)@(?:[^\s\.]+)(?:\.tmi\.twitch\.tv PRIVMSG) #([^\s!]+) :(.+)$" % RE_TAG_PART
@@ -36,6 +41,15 @@ class Connection:
     self._channels = {}
     self._back_buffer = []
 
+    self.rate = RATE_USER
+    self._running = False
+
+    self._ingress_thread = None
+    self._egress_thread = None
+
+    self._egress_queue = Queue()
+    self._egress_queue_lock = threading.Lock()
+
     self.on_ready()
 
   def connect(self):
@@ -52,7 +66,7 @@ class Connection:
   def join_channel(self, name : str):
     name = name.removeprefix('#').lower()
     if not name in self._channels:
-      self._socket.send("JOIN #{}\r\n".format(name).encode("utf-8")) # TODO: Move to join_channel
+      self.send("JOIN #%s" % name)
       new_channel = Channel(self, name)
       self._channels[name] = new_channel
       self.on_channel_join(new_channel)
@@ -68,7 +82,8 @@ class Connection:
     return True
 
   def send(self, content : str) -> None:
-    self._socket.send("{}\r\n".format(content).encode("utf-8"))
+    with self._egress_queue_lock:
+      self._egress_queue.put(content)
 
   def chat(self, channel_name : str, text : str) -> None:
     self.send("PRIVMSG #%s :%s" % (channel_name, text))
@@ -125,11 +140,8 @@ class Connection:
     self._back_buffer.pop(0)
     return line.decode("utf-8")
 
-  def run(self):
-    global RATE
-
-    # TODO: Handle CLEARCHAT, CLEARMSG, HOSTTARGET, NOTICE, RECONNECT, ROOMSTATE, USERNOTICE, USERSTATE
-    while True:
+  def _ingress_thread_func(self):
+    while self._running:
       response = self._read_line()
       self.on_raw_data(response)
       if response == "PING :tmi.twitch.tv": # On Ping
@@ -148,7 +160,34 @@ class Connection:
           else:
             self.on_error(response)
 
-      sleep(0.01)
+  def _egress_thread_func(self):
+    while self._running:
+      # TODO: Maybe this could lead to a race condition?
+      item = self._egress_queue.get()
+      with self._egress_queue_lock:
+        print("< " + item)
+        self._socket.send("{}\r\n".format(item).encode("utf-8"))
+        self._egress_queue.task_done()
+      sleep(1 / self.rate)
+
+  def start(self, rate = RATE_USER):
+    if self._running:
+      return False
+    self.rate = rate
+    self._running = True
+    self._ingress_thread = threading.Thread(target=self._ingress_thread_func)
+    self._egress_thread = threading.Thread(target=self._egress_thread_func)
+    self._ingress_thread.start()
+    self._egress_thread.start()
+    return True
+
+  def stop(self):
+    if not self._running:
+      return False
+    self._running = False
+    self._ingress_thread.join()
+    self._egress_thread.join()
+    return True
 
   def on_ready(self):
     pass
@@ -330,4 +369,4 @@ if __name__ == '__main__':
   bot = Connection("whyamitalking", os.getenv('CHAT_TOKEN'))
   bot.connect()
   channel = bot.join_channel("Andr3as07")
-  bot.run()
+  bot.start()

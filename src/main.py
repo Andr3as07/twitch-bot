@@ -357,6 +357,7 @@ class MyBot(libtwitch.Bot):
 
   def on_error(self, error : str):
     self.logger.error(error)
+    pass
 
 if __name__ == '__main__':
   load_dotenv()
@@ -364,4 +365,6 @@ if __name__ == '__main__':
   bot.load_extension("cogs.Example")
   bot.connect()
   channel = bot.join_channel("Andr3as07")
-  bot.run()
+  bot.start(libtwitch.RATE_MODERATOR)
+
+  print("Shutting down...")
