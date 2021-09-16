@@ -1,5 +1,7 @@
 from enum import Enum, auto
+from typing import Union
 
+from libtwitch.moderation_action import ModerationAction
 from libtwitch.core import Channel, Chatter, Message
 
 class PluginEvent(Enum):
@@ -19,6 +21,7 @@ class PluginEvent(Enum):
   ChannelPart = auto()
   ChatterJoin = auto()
   ChatterPart = auto()
+  Moderate = auto()
   Privmsg = auto()
   Message = auto()
   Command = auto()
@@ -49,7 +52,7 @@ class Plugin:
   def __init__(self, bot):
     self.bot = bot
 
-  def on_event(self, plugin_event : PluginEvent, *args, **kwargs):
+  def on_event(self, plugin_event : PluginEvent, *args, **kwargs) -> Union[None, ModerationAction]:
     # Bot events
     if plugin_event == PluginEvent.Destruct:
       self.on_destruct()
@@ -73,6 +76,8 @@ class Plugin:
       self.on_chatter_join(args[0])
     elif plugin_event == PluginEvent.ChatterPart:
       self.on_chatter_part(args[0])
+    elif plugin_event == PluginEvent.Moderate:
+      return self.on_moderate(args[0])
     elif plugin_event == PluginEvent.Privmsg:
       self.on_privmsg(args[0])
     elif plugin_event == PluginEvent.Message:
@@ -149,6 +154,15 @@ class Plugin:
     """
     triggered when a chatter parts to a channel
     :param chatter: the chatter
+    """
+
+  def on_moderate(self, message : Message) -> ModerationAction:
+    """
+    called when a privmsg is received in a channel
+    note: this includes all messages sent to the chat
+    note: this is called before on_privmsg
+    :param message: the received message
+    :return: the moderation action to take or None
     """
 
   def on_privmsg(self, message : Message):

@@ -174,19 +174,43 @@ class Bot(libtwitch.Connection):
     self._on_event(libtwitch.PluginEvent.Command, msg, cmd, args)
     return True
 
+  def _moderate(self, msg : libtwitch.Message):
+    if msg.author.has_type(libtwitch.ChatterType.Broadcaster) or \
+      msg.author.has_type(libtwitch.ChatterType.Twitch) or \
+      msg.author.has_type(libtwitch.ChatterType.Moderator):
+      return
+
+    harshest_action = None
+    for plugin_name in self.plugins:
+      action = self.plugins[plugin_name].on_event(libtwitch.PluginEvent.Moderate, msg)
+      if action is None:
+        continue
+      if harshest_action is None or action > harshest_action:
+        harshest_action = action
+    if harshest_action is not None:
+      msg.moderation_action = harshest_action
+
+  def on_message(self, msg : libtwitch.Message):
+    self._on_event(libtwitch.PluginEvent.Message.Message, msg)
+
   def on_privmsg(self, msg : libtwitch.Message):
     # Ignore self (echo)
     if msg.author.name.strip().lower() == self.nickname:
       return
 
+    self._moderate(msg)
+
     self._on_event(libtwitch.PluginEvent.Message.Privmsg, msg)
 
     # Handle command
-    if self._handle_command(msg):
-      return
+    if not self._handle_command(msg):
+      # This is a normal message
+      self.on_message(msg)
 
-    # This is a normal message
-    self._on_event(libtwitch.PluginEvent.Message.Message, msg)
+    msg.invoke()
+    resp = msg.get_response()
+    if resp is not None:
+      return msg.channel.chat(resp)
 
   def get_config_dir(self):
     return "./config"

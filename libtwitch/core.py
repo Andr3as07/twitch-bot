@@ -3,14 +3,14 @@ from __future__ import annotations
 import threading
 from queue import Queue
 
-from dotenv import load_dotenv
 from enum import IntFlag, unique
 from typing import Union
 from time import sleep
 import socket
-import os
 import re
 import time
+
+from libtwitch.moderation_action import ModerationAction, ModerationActionType
 
 HOST = "irc.twitch.tv"
 PORT = 6667
@@ -89,7 +89,7 @@ class Connection:
   def chat(self, channel_name : str, text : str) -> None:
     self.send("PRIVMSG #%s :%s" % (channel_name, text))
 
-  def _parse_tags(self, tags_str : str) -> list[str]:
+  def _parse_tags(self, tags_str : str) -> dict[str,str]:
     tags : dict = {}
     tags_parts = tags_str.split(';')
 
@@ -150,7 +150,6 @@ class Connection:
       if response == "PING :tmi.twitch.tv": # On Ping
         self.send("PONG :tmi.twitch.tv")
         continue
-      self.on_raw_ingress(response)
       if message_match is not None: # On Message
         self._handle_message(message_match)
       else: # Other message
@@ -254,13 +253,13 @@ def _update_chatter_tags(chatter : Chatter, tags : dict[str, str]) -> None:
       _update_chatter_type_enum(chatter, ChatterType.Moderator)
 
 class Channel:
-  def __init__(self, connection : bot, name : str):
+  def __init__(self, connection : Connection, name : str):
     self._connection = connection
     self.name = name
     self._chatters = {}
 
-  def leave(self) -> None:
-    self._connection.leave_channel(self)
+  def part(self) -> None:
+    self._connection.part_channel(self)
 
   def chat(self, text : str) -> None:
     self._connection.chat(self.name, text)
@@ -366,9 +365,28 @@ class Message:
     self.text = text
     self.tags = tags
     self.id = None
+    self.response : str = None
+    self.moderation_action : ModerationAction = None
 
   def delete(self) -> None:
     self.channel.chat(".delete %s" % self.id)
+
+  def get_response(self) -> str:
+    if self.moderation_action is not None and self.moderation_action.response is not None:
+      return self.moderation_action.response
+    return self.response
+
+  def invoke(self) -> None:
+    if self.moderation_action is None:
+      return
+
+    action_type : ModerationActionType = self.moderation_action.action
+    if action_type == ModerationActionType.RemoveMessage:
+      self.delete()
+    elif action_type == ModerationActionType.Timeout:
+      self.author.timeout(self.moderation_action.duration, self.moderation_action.reason)
+    elif action_type == ModerationActionType.Ban:
+      self.author.ban(self.moderation_action.reason)
 
 class ChatEvent:
   def __init__(self, channel : Channel, chatter : Chatter):
