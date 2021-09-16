@@ -27,7 +27,6 @@ class Userdata:
     current = self.raw
     for i, part in enumerate(parts):
       is_end = (i + 1 == len(parts))
-      next_is_end = (i + 2 == len(parts))
       if current is None or isinstance(current, int) or isinstance(current, float) or isinstance(current, str) or isinstance(current, bool):
         return False
       elif isinstance(current, dict):

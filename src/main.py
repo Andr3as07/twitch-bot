@@ -1,18 +1,12 @@
 from __future__ import annotations
 
 import logging
-import time
-from typing import Any, Union
 
 from dotenv import load_dotenv
 
 import libtwitch
-from src.userdata import Userdata, UserdataView
-import requests
-import random
 import json
 import os
-import re
 import io
 
 class MyBot(libtwitch.Bot):
@@ -56,45 +50,7 @@ class MyBot(libtwitch.Bot):
     self.config = config
     return True
 
-  def load_user(self, chatter : libtwitch.IrcChatter) -> Userdata:
-    if not chatter.id in self.user_data:
-      path = "./data/users/%s.json" % chatter.id
-      self.logger.debug('Loading userdata from "%s"' % path)
-      try:
-        with io.open(path, mode="r", encoding="utf-8") as f:
-          raw = json.load(f)
-          data = Userdata(raw)
-      except: # TODO: FIX
-        self.logger.debug('Failed to load userdata from "%s"! Generating default userdata.' % path)
-        raw = {
-          "id": chatter.id,
-          "name": chatter.name,
-          "display": chatter.display_name,
-        }
-        data = Userdata(raw)
-      self.user_data[chatter.id] = data
-    return self.user_data[chatter.id]
-
-  def save_user(self, user : Union[Userdata, int]) -> None:
-    if isinstance(user, int):
-      if user in self.user_data:
-        return
-      user = self.user_data[user]
-
-    while isinstance(user, UserdataView):
-      user = user.data
-
-    path = "./data/users/%s.json" % user.get("id")
-    self.logger.debug('Saving userdata to "%s"' % path)
-    try:
-      with io.open(path, mode="w", encoding="utf-8") as f:
-        user.set("stats.last_saved", int(time.time()))
-        raw = user.raw
-        json.dump(raw, f)
-    except:  # TODO: FIX
-      self.logger.warning('Failed to write userdata to "%s"' % path)
-
-  def on_command(self, msg : libtwitch.IrcMessage, cmd : str, args : list[str]) -> None:
+  def on_command(self, msg : libtwitch.BotMessage, cmd : str, args : list[str]) -> None:
     self.logger.debug("on_command(%s, %s, %s)" % (msg.channel.name, cmd, args))
 
     super().on_command(msg, cmd, args)
@@ -134,7 +90,7 @@ class MyBot(libtwitch.Bot):
 
     # TODO: Custom commands
 
-  def on_message(self, msg : libtwitch.IrcMessage):
+  def on_message(self, msg : libtwitch.BotMessage):
     # Ignore self (echo)
     if msg.author.name.strip().lower() == self.nickname:
       self.logger.debug('Ignoring self (echo)')
@@ -153,13 +109,6 @@ class MyBot(libtwitch.Bot):
 
   def on_raw_egress(self, data : str):
     print("< " + data)
-
-  def on_destruct(self):
-    super().on_destruct()
-
-    # Save all chatters
-    for user in self.user_data:
-      self.save_user(user)
 
   def on_connect(self):
     self.logger.debug("(Re)connected to twitch chat servers.")

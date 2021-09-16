@@ -4,7 +4,7 @@ from typing import Union
 
 from libtwitch.bot import BotMessage
 from libtwitch.moderation_action import ModerationAction
-from libtwitch.core import IrcChannel, IrcChatter, IrcMessage
+from libtwitch.core import IrcChannel, IrcChatter
 
 class PluginEvent(Enum):
   # Bot events
@@ -95,7 +95,7 @@ class Plugin:
     elif plugin_event == PluginEvent.PluginLoad:
       self.on_plugin_load(args[0])
     elif plugin_event == PluginEvent.PluginUnload:
-      self.on_unload(args[0])
+      self.on_plugin_unload(args[0])
     else:
       print("ERROR: Unhandled event %s" % plugin_event)
 
@@ -206,7 +206,7 @@ class Plugin:
     :param plugin_name: the name of the other plugin
     """
 
-  def on_unload(self, plugin_name : str):
+  def on_plugin_unload(self, plugin_name : str):
     """
     called when another plugin is being unloaded
     :param plugin_name: the name of the other plugin

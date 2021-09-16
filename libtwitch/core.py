@@ -4,7 +4,7 @@ import threading
 from queue import Queue
 
 from enum import IntFlag, unique
-from typing import Union
+from typing import Optional, Union
 from time import sleep
 import socket
 import re
@@ -34,19 +34,19 @@ class ChatterType(IntFlag):
 class IrcConnection:
   def __init__(self, nickname, token):
     self.nickname = nickname.lower()
-    self._token = token
-    self._socket = None
-    self._channels = {}
-    self._back_buffer = []
+    self._token : str = token
+    self._socket : Optional[socket] = None
+    self._channels : dict[str, IrcChannel] = {}
+    self._back_buffer : list[str] = []
 
-    self.rate = RATE_USER
-    self._running = False
+    self.rate : float = RATE_USER
+    self._running : bool = False
 
-    self._ingress_thread = None
-    self._egress_thread = None
+    self._ingress_thread : Optional[threading.Thread] = None
+    self._egress_thread : Optional[threading.Thread] = None
 
-    self._egress_queue = Queue()
-    self._egress_queue_lock = threading.Lock()
+    self._egress_queue : Queue = Queue()
+    self._egress_queue_lock : threading.Lock = threading.Lock()
 
     self.on_ready()
 
@@ -87,7 +87,8 @@ class IrcConnection:
   def chat(self, channel_name : str, text : str) -> None:
     self.send("PRIVMSG #%s :%s" % (channel_name, text))
 
-  def _parse_tags(self, tags_str : str) -> dict[str,str]:
+  @staticmethod
+  def _parse_tags(tags_str : str) -> dict[str, str]:
     tags : dict = {}
     tags_parts = tags_str.split(';')
 
@@ -248,7 +249,7 @@ def _update_chatter_tags(chatter : IrcChatter, tags : dict[str, str]) -> None:
     _update_chatter_type_enum(chatter, ChatterType.Turbo, "turbo" in badges)
 
     if not "mod" in tags:
-      _update_chatter_type_enum(chatter, ChatterType.Moderator)
+      _update_chatter_type_enum(chatter, ChatterType.Moderator, "moderator" in badges)
 
 class IrcChannel:
   def __init__(self, connection : IrcConnection, name : str):
@@ -271,27 +272,27 @@ class IrcChannel:
     else:
       self.chat(".ban %s %s" % (user, reason))
 
-  def timeout(self, user : Union[IrcChatter, str], time : int, reason : str = None):
+  def timeout(self, user : Union[IrcChatter, str], duration : int, reason : str = None):
     if isinstance(user, IrcChatter):
       user = user.name
 
-    if time < 0:
+    if duration < 0:
       return False
 
     if reason is None:
-      self.chat(".timeout %s %s" % (user, time))
+      self.chat(".timeout %s %s" % (user, duration))
     else:
-      self.chat(".timeout %s %s %s" % (user, time, reason))
+      self.chat(".timeout %s %s %s" % (user, duration, reason))
 
   def clear(self):
     self.chat(".clear")
 
-  def get_chatter(self, user_name : str) -> IrcChatter:
+  def get_chatter(self, user_name : str) -> Optional[IrcChatter]:
     if user_name in self._chatters:
       return self._chatters[user_name]
     return None
 
-  def handle_privmsg(self, author_name : str, text : str, tags : str):
+  def handle_privmsg(self, author_name : str, text : str, tags : dict[str, str]):
     chatter = self.get_chatter(author_name)
     if chatter is None:
       chatter = IrcChatter(self, author_name)
@@ -330,8 +331,8 @@ class IrcChatter:
   def __init__(self, channel : IrcChannel, name : str):
     self.channel : IrcChannel = channel
     self.name : str = name
-    self._display : str = None
-    self.id : int = None
+    self._display : Optional[str] = None
+    self.id : Optional[int] = None
     self.type : ChatterType = ChatterType.Unknown
 
   def has_type(self, other : ChatterType) -> bool:
@@ -343,8 +344,8 @@ class IrcChatter:
       return self._display
     return self.name
 
-  def timeout(self, time : int, reason : str = None):
-    self.channel.timeout(self, time, reason)
+  def timeout(self, duration : int, reason : str = None):
+    self.channel.timeout(self, duration, reason)
 
   def ban(self, reason : str = None):
     self.channel.ban(self, reason)
@@ -357,12 +358,12 @@ class IrcChatter:
 
 class IrcMessage:
   def __init__(self, channel : IrcChannel, author : IrcChatter, text : str, tags : dict[str, str]):
-    self.timestamp = time.time()
-    self.channel = channel
-    self.author = author
-    self.text = text
-    self.tags = tags
-    self.id = None
+    self.timestamp : time = time.time()
+    self.channel : IrcChannel = channel
+    self.author : IrcChatter = author
+    self.text : str = text
+    self.tags : dict[str, str] = tags
+    self.id : Optional[int] = None
 
   def delete(self) -> None:
     self.channel.chat(".delete %s" % self.id)

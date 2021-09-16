@@ -183,8 +183,11 @@ class Bot(libtwitch.IrcConnection):
     cmd = args[0][1:]
     args.pop(0)
 
-    self._on_event(libtwitch.PluginEvent.Command, msg, cmd, args)
+    self.on_command(msg, cmd, args)
     return True
+
+  def on_command(self, msg : BotMessage, cmd : str, args : list[str]):
+    self._on_event(libtwitch.PluginEvent.Command, msg, cmd, args)
 
   def _moderate(self, msg : BotMessage):
     if msg.author.has_type(libtwitch.ChatterType.Broadcaster) or \

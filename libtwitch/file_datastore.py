@@ -1,10 +1,9 @@
 import io
 import json
 import os
-from typing import Any, Union
+from typing import Any, Optional
 
-from libtwitch import IrcChannel, IrcChatter, Datastore
-from libtwitch.datastore import DatastoreDomain, get_domain
+from libtwitch.datastore import Datastore, DatastoreDomain, DatastoreDomainType, get_domain
 
 class FileDatastoreFile:
   def __init__(self, path, data):
@@ -33,7 +32,7 @@ class FileDatastore(Datastore):
       self._cache[path] = FileDatastoreFile(path, data)
     return self._cache[path]
 
-  def _get_file(self, subject : Union[None, IrcChannel, IrcChatter]) -> FileDatastoreFile:
+  def _get_file(self, subject : DatastoreDomainType) -> Optional[FileDatastoreFile]:
     domain = get_domain(subject)
     if domain is None:
       return None
@@ -47,7 +46,7 @@ class FileDatastore(Datastore):
     else:
       print("TODO")
 
-  def get(self, subject : Union[None, IrcChannel, IrcChatter], key : str, fallback = None) -> Any:
+  def get(self, subject : DatastoreDomainType, key : str, fallback = None) -> Any:
     file = self._get_file(subject)
     if file is None:
       return fallback
@@ -55,20 +54,20 @@ class FileDatastore(Datastore):
       return fallback
     return file.data[key]
 
-  def set(self, subject : Union[None, IrcChannel, IrcChatter], key : str, value) -> None:
+  def set(self, subject : DatastoreDomainType, key : str, value) -> None:
     file = self._get_file(subject)
     if file is None:
       return
     file.data[key] = value
     file.dirty = True
 
-  def has(self, subject : Union[None, IrcChannel, IrcChatter], key : str) -> bool:
+  def has(self, subject : DatastoreDomainType, key : str) -> bool:
     file = self._get_file(subject)
     if file is None:
       return False
     return key in file.data
 
-  def rem(self, subject : Union[None, IrcChannel, IrcChatter], key : str) -> None:
+  def rem(self, subject : DatastoreDomainType, key : str) -> None:
     file = self._get_file(subject)
     if file is None:
       return
@@ -77,7 +76,7 @@ class FileDatastore(Datastore):
     del file.data[key]
     file.dirty = True
 
-  def keys(self, subject : Union[None, IrcChannel, IrcChatter]) -> list[str]:
+  def keys(self, subject : DatastoreDomainType) -> list[str]:
     file = self._get_file(subject)
     if file is None:
       return []

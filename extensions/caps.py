@@ -56,7 +56,7 @@ class ModCaps(Plugin):
 
     return False
 
-  def on_moderate(self, message : IrcMessage) -> ModerationAction:
+  def on_moderate(self, message : BotMessage) -> ModerationAction:
     if not self._on_moderate_impl(message):
       return None
 
