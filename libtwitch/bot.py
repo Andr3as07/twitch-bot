@@ -1,11 +1,13 @@
+from __future__ import annotations
 import importlib
 import sys
-from typing import Any
+from typing import Any, Optional, Union
 
 import libtwitch
+from libtwitch import IrcChannel, IrcChatter, IrcMessage
 from libtwitch.datastore import Datastore
 
-class Bot(libtwitch.Connection):
+class Bot(libtwitch.IrcConnection):
   def __init__(self, nickname : str, token : str, store : Datastore):
     super().__init__(nickname, token)
 
@@ -150,11 +152,11 @@ class Bot(libtwitch.Connection):
     self._on_event(libtwitch.PluginEvent.Message.Disconnect)
     self.datastore.sync()
 
-  def on_channel_join(self, channel : libtwitch.Channel):
+  def on_channel_join(self, channel : libtwitch.IrcChannel):
     self._on_event(libtwitch.PluginEvent.Message.ChannelJoin, channel)
     self.datastore.sync()
 
-  def on_channel_part(self, channel : libtwitch.Channel):
+  def on_channel_part(self, channel : libtwitch.IrcChannel):
     self._on_event(libtwitch.PluginEvent.Message.ChannelPart, channel)
     self.datastore.sync()
 
@@ -166,7 +168,7 @@ class Bot(libtwitch.Connection):
     self._on_event(libtwitch.PluginEvent.Message.ChatterPart, part_event)
     self.datastore.sync()
 
-  def _handle_command(self, msg : libtwitch.Message):
+  def _handle_command(self, msg : BotMessage):
     if not msg.text.startswith('?'):
       return False
 
@@ -184,7 +186,7 @@ class Bot(libtwitch.Connection):
     self._on_event(libtwitch.PluginEvent.Command, msg, cmd, args)
     return True
 
-  def _moderate(self, msg : libtwitch.Message):
+  def _moderate(self, msg : BotMessage):
     if msg.author.has_type(libtwitch.ChatterType.Broadcaster) or \
       msg.author.has_type(libtwitch.ChatterType.Twitch) or \
       msg.author.has_type(libtwitch.ChatterType.Moderator):
@@ -200,10 +202,12 @@ class Bot(libtwitch.Connection):
     if harshest_action is not None:
       msg.moderation_action = harshest_action
 
-  def on_message(self, msg : libtwitch.Message):
+  def on_message(self, msg : BotMessage):
     self._on_event(libtwitch.PluginEvent.Message.Message, msg)
 
-  def on_privmsg(self, msg : libtwitch.Message):
+  def on_privmsg(self, raw_msg : libtwitch.IrcMessage):
+    msg = BotMessage.from_raw_message(raw_msg)
+
     # Ignore self (echo)
     if msg.author.name.strip().lower() == self.nickname:
       return
@@ -223,8 +227,41 @@ class Bot(libtwitch.Connection):
       msg.channel.chat(resp)
     self.datastore.sync()
 
-  def get_config_dir(self):
+  @staticmethod
+  def get_config_dir():
     return "./config"
 
-  def get_data_dir(self):
+  @staticmethod
+  def get_data_dir():
     return "./data"
+
+class BotMessage(IrcMessage):
+  @classmethod
+  def from_raw_message(cls, msg : IrcMessage) -> BotMessage:
+    return BotMessage(msg.channel, msg.author, msg.text, msg.tags)
+
+  def __init__(self, channel : IrcChannel, author : IrcChatter, text : str, tags : dict[str, str]):
+    super().__init__(channel, author, text, tags)
+
+    self.response : Optional[str] = None
+    self.moderation_action : Optional[libtwitch.ModerationAction] = None
+    self.custom_data : dict[str, Any] = {}
+
+  def get_response(self) -> str:
+    if self.moderation_action is not None and self.moderation_action.response is not None:
+      return self.moderation_action.response
+    return self.response
+
+  def invoke(self) -> None:
+    from libtwitch import ModerationActionType
+
+    if self.moderation_action is None:
+      return
+
+    action_type: ModerationActionType = self.moderation_action.action
+    if action_type == ModerationActionType.RemoveMessage:
+      self.delete()
+    elif action_type == ModerationActionType.Timeout:
+      self.author.timeout(self.moderation_action.duration, self.moderation_action.reason)
+    elif action_type == ModerationActionType.Ban:
+      self.author.ban(self.moderation_action.reason)

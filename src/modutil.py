@@ -2,12 +2,12 @@ import random
 from datetime import datetime
 from typing import Union
 
-from libtwitch import Bot, Chatter, ModerationAction, ModerationActionType
+from libtwitch import Bot, IrcChatter, ModerationAction, ModerationActionType
 from src import textutil
 
 class ModerationMeta:
-  def __init__(self, chatter : Chatter, mod : str, count : int , last : datetime):
-    self.chatter : Chatter = chatter
+  def __init__(self, chatter : IrcChatter, mod : str, count : int, last : datetime):
+    self.chatter : IrcChatter = chatter
     self.mod : str = mod
     self.count : int = count
     self.last : datetime = last
@@ -19,17 +19,17 @@ class ModerationMeta:
   def save(self, bot : Bot):
     set_moderation_meta(bot, self.chatter, self.mod, self)
 
-def get_moderation_meta(bot : Bot, chatter : Chatter, mod : str) -> ModerationMeta:
+def get_moderation_meta(bot : Bot, chatter : IrcChatter, mod : str) -> ModerationMeta:
   count = bot.datastore.get(chatter, "mod.%s.count" % mod, 0)
   time = bot.datastore.get(chatter, "mod.%s.time" % mod, 0)
 
   return ModerationMeta(chatter, mod, count, datetime.fromtimestamp(time))
 
-def set_moderation_meta(bot : Bot, chatter : Chatter, mod : str, meta : ModerationMeta) -> None:
+def set_moderation_meta(bot : Bot, chatter : IrcChatter, mod : str, meta : ModerationMeta) -> None:
   bot.datastore.set(chatter, "mod.%s.count" % mod, meta.count)
   bot.datastore.set(chatter, "mod.%s.time" % mod, datetime.timestamp(meta.last))
 
-def get_tiered_moderation_action(chatter : Chatter, actions : dict, count : int = 1) -> Union[None, ModerationAction]:
+def get_tiered_moderation_action(chatter : IrcChatter, actions : dict, count : int = 1) -> Union[None, ModerationAction]:
   moderation_action = ModerationAction(ModerationActionType.Nothing)
   best = None
   for action in actions:

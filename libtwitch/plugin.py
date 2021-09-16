@@ -2,8 +2,9 @@ import os
 from enum import Enum, auto
 from typing import Union
 
+from libtwitch.bot import BotMessage
 from libtwitch.moderation_action import ModerationAction
-from libtwitch.core import Channel, Chatter, Message
+from libtwitch.core import IrcChannel, IrcChatter, IrcMessage
 
 class PluginEvent(Enum):
   # Bot events
@@ -133,31 +134,31 @@ class Plugin:
     :param data: the raw data formatted as a utf-8 string
     """
 
-  def on_channel_join(self, channel : Channel):
+  def on_channel_join(self, channel : IrcChannel):
     """
     triggered when the bot connects to a channel
     :param channel: the joined channel
     """
 
-  def on_channel_part(self, channel : Channel):
+  def on_channel_part(self, channel : IrcChannel):
     """
     triggered when the bot leaves to a channel
     :param channel: the parted channel
     """
 
-  def on_chatter_join(self, chatter : Chatter):
+  def on_chatter_join(self, chatter : IrcChatter):
     """
     triggered when a chatter joins to a channel
     :param chatter: the chatter
     """
 
-  def on_chatter_part(self, chatter : Chatter):
+  def on_chatter_part(self, chatter : IrcChatter):
     """
     triggered when a chatter parts to a channel
     :param chatter: the chatter
     """
 
-  def on_moderate(self, message : Message) -> ModerationAction:
+  def on_moderate(self, message : BotMessage) -> ModerationAction:
     """
     called when a privmsg is received in a channel
     note: this includes all messages sent to the chat
@@ -166,21 +167,21 @@ class Plugin:
     :return: the moderation action to take or None
     """
 
-  def on_privmsg(self, message : Message):
+  def on_privmsg(self, message : BotMessage):
     """
     called when a privmsg is received in a channel
     note: this includes all messages sent to the chat
     :param message: the received message
     """
 
-  def on_message(self, message : Message):
+  def on_message(self, message : BotMessage):
     """
     called when a message is received in a channel
     note: this does not include commands (see on_privmsg and on_command)
     :param message: the received message
     """
 
-  def on_command(self, message : Message, cmd : str, args : dict[str, str]):
+  def on_command(self, message : BotMessage, cmd : str, args : dict[str, str]):
     """
     called when a command is recognized in a channel
     :param message: the received message

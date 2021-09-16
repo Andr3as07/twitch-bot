@@ -2,7 +2,7 @@ import io
 import os
 import random
 
-from libtwitch import Bot, Message, Plugin
+from libtwitch import Bot, BotMessage, Plugin
 
 class Fun8Ball(Plugin):
   name = "fun.8ball"
@@ -30,7 +30,7 @@ class Fun8Ball(Plugin):
             continue
           self.emotes.append(emote)
 
-  def on_command(self, message : Message, cmd : str, args : dict[str, str]):
+  def on_command(self, message : BotMessage, cmd : str, args : dict[str, str]):
     if cmd != "8ball":
       return
 

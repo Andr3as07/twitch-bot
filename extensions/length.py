@@ -2,7 +2,7 @@ import io
 import json
 import os
 
-from libtwitch import Bot, Message, ModerationAction, Plugin
+from libtwitch import Bot, BotMessage, ModerationAction, Plugin
 from src import modutil
 
 class ModLength(Plugin):
@@ -36,11 +36,11 @@ class ModLength(Plugin):
       if jdata is not None:
         self.config = jdata
 
-  def _on_moderate_impl(self, message : Message) -> ModerationAction:
+  def _on_moderate_impl(self, message : BotMessage) -> ModerationAction:
     length = self.config["length"]
     return len(message.text) > length
 
-  def on_moderate(self, message : Message) -> ModerationAction:
+  def on_moderate(self, message : BotMessage) -> ModerationAction:
     if not self._on_moderate_impl(message):
       return None
 

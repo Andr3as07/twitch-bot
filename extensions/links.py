@@ -3,7 +3,7 @@ import json
 import os
 import re
 
-from libtwitch import Bot, Message, ModerationAction, Plugin
+from libtwitch import Bot, BotMessage, ModerationAction, Plugin
 from src import modutil
 
 class ModLinks(Plugin):
@@ -38,7 +38,7 @@ class ModLinks(Plugin):
         self.config = jdata
 
   @staticmethod
-  def _on_moderate_impl(message : Message) -> ModerationAction:
+  def _on_moderate_impl(message : BotMessage) -> ModerationAction:
     # TODO: Allow specific domains and paths
 
     # findall() has been used with valid conditions for urls in string
@@ -47,7 +47,7 @@ class ModLinks(Plugin):
 
     return len(urls) > 0
 
-  def on_moderate(self, message : Message) -> ModerationAction:
+  def on_moderate(self, message : BotMessage) -> ModerationAction:
     if not self._on_moderate_impl(message):
       return None
 

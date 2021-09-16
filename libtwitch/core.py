@@ -10,8 +10,6 @@ import socket
 import re
 import time
 
-from libtwitch.moderation_action import ModerationAction, ModerationActionType
-
 HOST = "irc.twitch.tv"
 PORT = 6667
 RATE_USER = 20 / 30  # messages per second
@@ -33,7 +31,7 @@ class ChatterType(IntFlag):
   VIP = 0x20
   Turbo = 0x40
 
-class Connection:
+class IrcConnection:
   def __init__(self, nickname, token):
     self.nickname = nickname.lower()
     self._token = token
@@ -67,13 +65,13 @@ class Connection:
     name = name.removeprefix('#').lower()
     if not name in self._channels:
       self.send("JOIN #%s" % name)
-      new_channel = Channel(self, name)
+      new_channel = IrcChannel(self, name)
       self._channels[name] = new_channel
       self.on_channel_join(new_channel)
 
     return self._channels[name]
 
-  def part_channel(self, channel : Union[str, Channel]) -> bool:
+  def part_channel(self, channel : Union[str, IrcChannel]) -> bool:
     if not channel.name in self._channels:
       return False
     self.on_channel_part(channel)
@@ -214,10 +212,10 @@ class Connection:
   def on_disconnect(self):
     pass
 
-  def on_channel_join(self, channel : Channel):
+  def on_channel_join(self, channel : IrcChannel):
     pass
 
-  def on_channel_part(self, channel : Channel):
+  def on_channel_part(self, channel : IrcChannel):
     pass
 
   def on_join(self, join_event : ChatEvent):
@@ -226,16 +224,16 @@ class Connection:
   def on_part(self, part_event : ChatEvent):
     pass
 
-  def on_privmsg(self, msg : Message):
+  def on_privmsg(self, msg : IrcMessage):
     pass
 
-def _update_chatter_type_enum(chatter : Chatter, chatter_type : ChatterType, value : bool) -> None:
+def _update_chatter_type_enum(chatter : IrcChatter, chatter_type : ChatterType, value : bool) -> None:
   if value:
     chatter.type |= chatter_type
   else:
     chatter.type &= ~chatter_type
 
-def _update_chatter_tags(chatter : Chatter, tags : dict[str, str]) -> None:
+def _update_chatter_tags(chatter : IrcChatter, tags : dict[str, str]) -> None:
   if "display-name" in tags:
     chatter._display = tags["display-name"]
   if "user-id" in tags:
@@ -252,8 +250,8 @@ def _update_chatter_tags(chatter : Chatter, tags : dict[str, str]) -> None:
     if not "mod" in tags:
       _update_chatter_type_enum(chatter, ChatterType.Moderator)
 
-class Channel:
-  def __init__(self, connection : Connection, name : str):
+class IrcChannel:
+  def __init__(self, connection : IrcConnection, name : str):
     self._connection = connection
     self.name = name
     self._chatters = {}
@@ -264,8 +262,8 @@ class Channel:
   def chat(self, text : str) -> None:
     self._connection.chat(self.name, text)
 
-  def ban(self, user : Union[Chatter, str], reason : str = None) -> None:
-    if isinstance(user, Chatter):
+  def ban(self, user : Union[IrcChatter, str], reason : str = None) -> None:
+    if isinstance(user, IrcChatter):
       user = user.name
 
     if reason is None:
@@ -273,8 +271,8 @@ class Channel:
     else:
       self.chat(".ban %s %s" % (user, reason))
 
-  def timeout(self, user : Union[Chatter, str], time : int, reason : str = None):
-    if isinstance(user, Chatter):
+  def timeout(self, user : Union[IrcChatter, str], time : int, reason : str = None):
+    if isinstance(user, IrcChatter):
       user = user.name
 
     if time < 0:
@@ -288,7 +286,7 @@ class Channel:
   def clear(self):
     self.chat(".clear")
 
-  def get_chatter(self, user_name : str) -> Chatter:
+  def get_chatter(self, user_name : str) -> IrcChatter:
     if user_name in self._chatters:
       return self._chatters[user_name]
     return None
@@ -296,12 +294,12 @@ class Channel:
   def handle_privmsg(self, author_name : str, text : str, tags : str):
     chatter = self.get_chatter(author_name)
     if chatter is None:
-      chatter = Chatter(self, author_name)
+      chatter = IrcChatter(self, author_name)
       self._chatters[author_name] = chatter
 
     _update_chatter_tags(chatter, tags)
 
-    msg = Message(self, chatter, text, tags)
+    msg = IrcMessage(self, chatter, text, tags)
 
     if "id" in tags:
       msg.id = tags["id"]
@@ -311,14 +309,14 @@ class Channel:
   def handle_join(self, name : str):
     chatter = self.get_chatter(name)
     if chatter is None:
-      chatter = Chatter(self, name)
+      chatter = IrcChatter(self, name)
       self._chatters[name] = chatter
     self._connection.on_join(ChatEvent(self, chatter))
 
   def handle_part(self, name : str):
     chatter = self.get_chatter(name)
     if chatter is None:
-      chatter = Chatter(self, name)
+      chatter = IrcChatter(self, name)
       self._chatters[name] = chatter
     self._connection.on_part(ChatEvent(self, chatter))
 
@@ -328,9 +326,9 @@ class Channel:
   def __repr__(self):
     return str(self)
 
-class Chatter:
-  def __init__(self, channel : Channel, name : str):
-    self.channel : Channel = channel
+class IrcChatter:
+  def __init__(self, channel : IrcChannel, name : str):
+    self.channel : IrcChannel = channel
     self.name : str = name
     self._display : str = None
     self.id : int = None
@@ -357,38 +355,19 @@ class Chatter:
   def __repr__(self):
     return str(self)
 
-class Message:
-  def __init__(self, channel : Channel, author : Chatter, text : str, tags : dict[str, str]):
+class IrcMessage:
+  def __init__(self, channel : IrcChannel, author : IrcChatter, text : str, tags : dict[str, str]):
     self.timestamp = time.time()
     self.channel = channel
     self.author = author
     self.text = text
     self.tags = tags
     self.id = None
-    self.response : str = None
-    self.moderation_action : ModerationAction = None
 
   def delete(self) -> None:
     self.channel.chat(".delete %s" % self.id)
 
-  def get_response(self) -> str:
-    if self.moderation_action is not None and self.moderation_action.response is not None:
-      return self.moderation_action.response
-    return self.response
-
-  def invoke(self) -> None:
-    if self.moderation_action is None:
-      return
-
-    action_type : ModerationActionType = self.moderation_action.action
-    if action_type == ModerationActionType.RemoveMessage:
-      self.delete()
-    elif action_type == ModerationActionType.Timeout:
-      self.author.timeout(self.moderation_action.duration, self.moderation_action.reason)
-    elif action_type == ModerationActionType.Ban:
-      self.author.ban(self.moderation_action.reason)
-
 class ChatEvent:
-  def __init__(self, channel : Channel, chatter : Chatter):
+  def __init__(self, channel : IrcChannel, chatter : IrcChatter):
     self.channel = channel
     self.chatter = chatter

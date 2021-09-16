@@ -2,7 +2,7 @@ import io
 import json
 import os
 
-from libtwitch import Bot, Message, ModerationAction, Plugin
+from libtwitch import Bot, BotMessage, ModerationAction, Plugin
 from src import modutil
 
 class ModCaps(Plugin):
@@ -38,7 +38,7 @@ class ModCaps(Plugin):
       if jdata is not None:
         self.config = jdata
 
-  def _on_moderate_impl(self, message : Message) -> ModerationAction:
+  def _on_moderate_impl(self, message : BotMessage) -> ModerationAction:
     num_caps = 0
     length = len(message.text)
     for char in message.text:
@@ -56,7 +56,7 @@ class ModCaps(Plugin):
 
     return False
 
-  def on_moderate(self, message : Message) -> ModerationAction:
+  def on_moderate(self, message : IrcMessage) -> ModerationAction:
     if not self._on_moderate_impl(message):
       return None
 

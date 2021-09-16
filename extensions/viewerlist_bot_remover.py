@@ -4,7 +4,7 @@ import os
 
 import requests
 
-from libtwitch import Bot, ChatEvent, Chatter, Message, Plugin
+from libtwitch import Bot, ChatEvent, IrcChatter, BotMessage, Plugin
 
 class ViewerlistBotRemover(Plugin):
   name = "mod.viewerlist_bot_remover"
@@ -33,7 +33,7 @@ class ViewerlistBotRemover(Plugin):
             continue
           self.ignored.append(username)
 
-  def _ban(self, chatter : Chatter):
+  def _ban(self, chatter : IrcChatter):
     # Don't ban yourself
     if chatter.name == self.bot.nickname:
       return
@@ -53,7 +53,7 @@ class ViewerlistBotRemover(Plugin):
   def on_chatter_join(self, join_event : ChatEvent):
     self._ban(join_event.chatter)
 
-  def on_privmsg(self, message : Message):
+  def on_privmsg(self, message : BotMessage):
     self._ban(message.author)
 
 def setup(bot : Bot):

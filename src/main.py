@@ -56,7 +56,7 @@ class MyBot(libtwitch.Bot):
     self.config = config
     return True
 
-  def load_user(self, chatter : libtwitch.Chatter) -> Userdata:
+  def load_user(self, chatter : libtwitch.IrcChatter) -> Userdata:
     if not chatter.id in self.user_data:
       path = "./data/users/%s.json" % chatter.id
       self.logger.debug('Loading userdata from "%s"' % path)
@@ -94,7 +94,7 @@ class MyBot(libtwitch.Bot):
     except:  # TODO: FIX
       self.logger.warning('Failed to write userdata to "%s"' % path)
 
-  def on_command(self, msg : libtwitch.Message, cmd : str, args : list[str]) -> None:
+  def on_command(self, msg : libtwitch.IrcMessage, cmd : str, args : list[str]) -> None:
     self.logger.debug("on_command(%s, %s, %s)" % (msg.channel.name, cmd, args))
 
     super().on_command(msg, cmd, args)
@@ -134,7 +134,7 @@ class MyBot(libtwitch.Bot):
 
     # TODO: Custom commands
 
-  def on_message(self, msg : libtwitch.Message):
+  def on_message(self, msg : libtwitch.IrcMessage):
     # Ignore self (echo)
     if msg.author.name.strip().lower() == self.nickname:
       self.logger.debug('Ignoring self (echo)')
@@ -148,6 +148,12 @@ class MyBot(libtwitch.Bot):
     # Continue command processing
     super().on_message(msg)
 
+  def on_raw_ingress(self, data : str):
+    print("> " + data)
+
+  def on_raw_egress(self, data : str):
+    print("< " + data)
+
   def on_destruct(self):
     super().on_destruct()
 
@@ -158,10 +164,10 @@ class MyBot(libtwitch.Bot):
   def on_connect(self):
     self.logger.debug("(Re)connected to twitch chat servers.")
 
-  def on_channel_join(self, channel : libtwitch.Channel):
+  def on_channel_join(self, channel : libtwitch.IrcChannel):
     self.logger.info("Joined channel %s" % channel.name)
 
-  def on_channel_part(self, channel : libtwitch.Channel):
+  def on_channel_part(self, channel : libtwitch.IrcChannel):
     self.logger.info("Parted from channel %s" % channel.name)
 
   def on_error(self, error : str):
