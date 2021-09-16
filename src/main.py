@@ -15,34 +15,9 @@ import os
 import re
 import io
 
-def substitute_variables(text : str, data : dict[str, Any]) -> str:
-  if not "{" in text:
-    return text
-
-  result = ""
-  var = ""
-  in_var = False
-  for char in text:
-    if char == "{":
-      in_var = True
-    elif char == "}":
-      if var in data:
-        result += str(data[var])
-      else:
-        result += "{" + var + "}"
-      in_var = False
-      var = ""
-    else:
-      if in_var:
-        var += char
-      else:
-        result += char
-
-  return result
-
 class MyBot(libtwitch.Bot):
   def __init__(self, nickname : str, token : str, path : str):
-    super().__init__(nickname, token)
+    super().__init__(nickname, token, libtwitch.FileDatastore("./data"))
 
     self.logger : logging.Logger = logging.getLogger('bot')
     c_handler = logging.StreamHandler()
@@ -201,8 +176,13 @@ class MyBot(libtwitch.Bot):
 if __name__ == '__main__':
   load_dotenv()
   bot = MyBot(os.getenv('NICKNAME'), os.getenv('CHAT_TOKEN'), "config")
+  # Commands
   bot.load_extension("8ball")
+
+  # Moderation
   bot.load_extension("viewerlist_bot_remover")
+  bot.load_extension("caps")
+
   bot.connect()
   channel = bot.join_channel(os.getenv('CHANNEL'))
   bot.start(libtwitch.RATE_MODERATOR)

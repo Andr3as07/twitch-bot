@@ -3,10 +3,13 @@ import sys
 from typing import Any
 
 import libtwitch
+from libtwitch.datastore import Datastore
 
 class Bot(libtwitch.Connection):
-  def __init__(self, nickname : str, token : str):
+  def __init__(self, nickname : str, token : str, store : Datastore):
     super().__init__(nickname, token)
+
+    self.datastore = store
 
     self._extensions : dict[str, Any] = {}
     self.plugins : dict[str, libtwitch.Plugin] = {}
@@ -125,6 +128,7 @@ class Bot(libtwitch.Connection):
     # Note plugins should be unregistered in the extensions teardown function.
     for plugin_name in self._plugins:
       self.unregister_plugin(plugin_name)
+    self.datastore.sync()
 
   def on_raw_ingress(self, data : str):
     self._on_event(libtwitch.PluginEvent.Message.RawIngress, data)
@@ -140,21 +144,27 @@ class Bot(libtwitch.Connection):
 
   def on_connect(self):
     self._on_event(libtwitch.PluginEvent.Message.Connect)
+    self.datastore.sync()
 
   def on_disconnect(self):
     self._on_event(libtwitch.PluginEvent.Message.Disconnect)
+    self.datastore.sync()
 
   def on_channel_join(self, channel : libtwitch.Channel):
     self._on_event(libtwitch.PluginEvent.Message.ChannelJoin, channel)
+    self.datastore.sync()
 
   def on_channel_part(self, channel : libtwitch.Channel):
     self._on_event(libtwitch.PluginEvent.Message.ChannelPart, channel)
+    self.datastore.sync()
 
   def on_join(self, join_event : libtwitch.ChatEvent):
     self._on_event(libtwitch.PluginEvent.Message.ChatterJoin, join_event)
+    self.datastore.sync()
 
   def on_part(self, part_event : libtwitch.ChatEvent):
     self._on_event(libtwitch.PluginEvent.Message.ChatterPart, part_event)
+    self.datastore.sync()
 
   def _handle_command(self, msg : libtwitch.Message):
     if not msg.text.startswith('?'):
@@ -210,7 +220,8 @@ class Bot(libtwitch.Connection):
     msg.invoke()
     resp = msg.get_response()
     if resp is not None:
-      return msg.channel.chat(resp)
+      msg.channel.chat(resp)
+    self.datastore.sync()
 
   def get_config_dir(self):
     return "./config"

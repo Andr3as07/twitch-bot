@@ -1,0 +1,52 @@
+{
+  "min": 10,
+  "max": 50,
+  "percent": 0.60,
+  "actions": [
+    {
+      "count": 1,
+      "messages": [
+        "@{user.name} -> Please use fewer caps.",
+        "@{user.name} -> Fewer capital letters makes for less yelling in chat."
+      ],
+      "mod_action": {
+        "type": "nothing"
+      }
+    },
+    {
+      "count": 2,
+      "messages": [
+        "@{user.name} -> Please avoid spamming caps.",
+        "@{user.name} -> Please refrain from excessive use of capital letters."
+      ],
+      "mod_action": {
+        "type": "remove_message"
+      }
+    },
+    {
+      "count": 3,
+      "messages": [
+        "@{user.name} -> Stop spamming caps.",
+        "@{user.name} -> Refrain from using large amounts of capital letters."
+      ],
+      "mod_action": {
+        "type": "timeout",
+        "reason": "Spamming Caps",
+        "constant": 60,
+        "linear": 120,
+        "quadratic": 0
+      }
+    },
+    {
+      "count": 10,
+      "messages": [],
+      "mod_action": {
+        "type": "ban",
+        "reason": "Spamming Caps"
+      }
+    }
+  ],
+  "exclusion": [
+    "regular"
+  ]
+}

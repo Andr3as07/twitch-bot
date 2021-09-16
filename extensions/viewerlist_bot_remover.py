@@ -7,7 +7,7 @@ import requests
 from libtwitch import Bot, ChatEvent, Chatter, Message, Plugin
 
 class ViewerlistBotRemover(Plugin):
-  name = "ViewerlistBotRemover"
+  name = "mod.viewerlist_bot_remover"
   def __init__(self, bot):
     super().__init__(bot)
     self.bots : list[str] = []
@@ -60,4 +60,4 @@ def setup(bot : Bot):
   bot.register_plugin(ViewerlistBotRemover(bot))
 
 def teardown(bot : Bot):
-  bot.unregister_plugin("ViewerlistBotRemover")
+  bot.unregister_plugin("mod.viewerlist_bot_remover")

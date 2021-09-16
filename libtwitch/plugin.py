@@ -1,3 +1,4 @@
+import os
 from enum import Enum, auto
 from typing import Union
 
@@ -210,8 +211,16 @@ class Plugin:
     :param plugin_name: the name of the other plugin
     """
 
+  @staticmethod
+  def _ensure_dir(path: str):
+    os.makedirs(path, exist_ok=True)
+
   def get_config_dir(self):
-    return self.bot.get_config_dir() + "/" + self.get_name()
+    path = self.bot.get_config_dir() + "/" + self.get_name().replace('.', '/')
+    self._ensure_dir(path)
+    return path
 
   def get_data_dir(self):
-    return self.bot.get_data_dir() + "/" + self.get_name()
+    path = self.bot.get_data_dir() + "/" + self.get_name().replace('.', '/')
+    self._ensure_dir(path)
+    return path

@@ -4,10 +4,10 @@ from enum import IntEnum
 from functools import total_ordering
 
 class ModerationActionType(IntEnum):
-  RemoveMessage = 0
-  Timeout = 1
-  Ban = 2
-
+  Nothing = 0
+  RemoveMessage = 1
+  Timeout = 2
+  Ban = 3
 
 @total_ordering
 class ModerationAction:

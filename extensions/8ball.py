@@ -5,7 +5,7 @@ import random
 from libtwitch import Bot, Message, Plugin
 
 class Fun8Ball(Plugin):
-  name = "8ball"
+  name = "fun.8ball"
   def __init__(self, bot):
     super().__init__(bot)
     self.responses = []
@@ -41,4 +41,4 @@ def setup(bot : Bot):
   bot.register_plugin(Fun8Ball(bot))
 
 def teardown(bot : Bot):
-  bot.unregister_plugin("8ball")
+  bot.unregister_plugin("fun.8ball")
