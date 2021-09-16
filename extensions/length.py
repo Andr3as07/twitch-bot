@@ -5,8 +5,8 @@ import os
 from libtwitch import Bot, Message, ModerationAction, Plugin
 from src import modutil
 
-class ModCaps(Plugin):
-  name = "mod.caps"
+class ModLength(Plugin):
+  name = "mod.length"
   def __init__(self, bot):
     super().__init__(bot)
     self.config = None
@@ -15,18 +15,16 @@ class ModCaps(Plugin):
     config_path = self.get_config_dir() + "/config.json"
     if not os.path.exists(config_path):
       self.config = {
-        "min": 10,
-        "max": 50,
-        "percent": 0.60,
+        "length": 300,
         "actions": [
           {
             "count": 1,
             "messages": [
-              "@{user.name} -> Stop spamming caps."
+              "@{user.name} -> Please no lengthy messages."
             ],
             "mod_action": {
               "type": "timeout",
-              "reason": "Spamming Caps",
+              "reason": "Writing Long Paragraphs",
               "constant": 10
             }
           }
@@ -39,35 +37,21 @@ class ModCaps(Plugin):
         self.config = jdata
 
   def _on_moderate_impl(self, message : Message) -> ModerationAction:
-    num_caps = 0
-    length = len(message.text)
-    for char in message.text:
-      if 'A' <= char <= 'Z':
-        num_caps += 1
-
-    if num_caps < self.config['min']:
-      return False
-
-    if num_caps > self.config['max']:
-      return True
-
-    if num_caps / length > self.config["percent"]:
-      return True
-
-    return False
+    length = self.config["length"]
+    return len(message.text) > length
 
   def on_moderate(self, message : Message) -> ModerationAction:
     if not self._on_moderate_impl(message):
       return None
 
-    meta = modutil.get_moderation_meta(self.bot, message.author, 'caps')
+    meta = modutil.get_moderation_meta(self.bot, message.author, 'length')
     meta.invoke()
     meta.save(self.bot)
     action = modutil.get_tiered_moderation_action(message.author, self.config['actions'], meta.count)
     return action
 
 def setup(bot : Bot):
-  bot.register_plugin(ModCaps(bot))
+  bot.register_plugin(ModLength(bot))
 
 def teardown(bot : Bot):
-  bot.unregister_plugin("mod.caps")
+  bot.unregister_plugin("mod.length")

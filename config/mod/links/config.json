@@ -1,0 +1,38 @@
+{
+  "actions": [
+    {
+      "count": 1,
+      "messages": [
+        "@{user.name} -> No links in chat please."
+      ],
+      "mod_action": {
+        "type": "remove_message"
+      }
+    },
+    {
+      "count": 3,
+      "messages": [
+        "@{user.name} -> No links in the chat.",
+        "@{user.name} -> Refrain from using links."
+      ],
+      "mod_action": {
+        "type": "timeout",
+        "reason": "Writing Links",
+        "constant": 60,
+        "linear": 60,
+        "quadratic": 30
+      }
+    },
+    {
+      "count": 10,
+      "messages": [],
+      "mod_action": {
+        "type": "ban",
+        "reason": "Writing Links"
+      }
+    }
+  ],
+  "exclusions": [
+    "regular"
+  ]
+}

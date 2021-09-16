@@ -1,0 +1,27 @@
+{
+  "actions": [
+    {
+      "count": 1,
+      "messages": [
+        "@{user.name} -> /me is not allowed."
+      ],
+      "mod_action": {
+        "type": "remove_message"
+      }
+    },
+    {
+      "count": 3,
+      "messages": [
+        "@{user.name} -> /me is not allowed."
+      ],
+      "mod_action": {
+        "type": "timeout",
+        "reason": "Using the /me command",
+        "constant": 10,
+        "linear": 20,
+        "quadratic": 10
+      }
+    }
+  ],
+  "exclusions": []
+}

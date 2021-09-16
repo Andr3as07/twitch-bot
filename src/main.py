@@ -29,11 +29,6 @@ class MyBot(libtwitch.Bot):
 
     self.logger.debug('Initialized with nick %s.' % nickname)
 
-    self.config : dict = None
-    self.load_config(path + "/config.json")
-    if self.config is None:
-      self.logger.critical("Bot can not run without valid config.")
-      raise RuntimeError()
     self.user_data : dict = {} # TODO: FIX: This should be separated into the different channels
 
     # Ignored users
@@ -182,6 +177,9 @@ if __name__ == '__main__':
   # Moderation
   bot.load_extension("viewerlist_bot_remover")
   bot.load_extension("caps")
+  bot.load_extension("length")
+  bot.load_extension("links")
+  bot.load_extension("me")
 
   bot.connect()
   channel = bot.join_channel(os.getenv('CHANNEL'))
