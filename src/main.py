@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from redis import Redis
 from dotenv import load_dotenv
 
 import libtwitch
@@ -9,9 +10,11 @@ import json
 import os
 import io
 
+from libtwitch import Datastore, FileDatastore
+
 class MyBot(libtwitch.Bot):
-  def __init__(self, nickname : str, token : str, path : str):
-    super().__init__(nickname, token, libtwitch.FileDatastore("./data"))
+  def __init__(self, nickname : str, token : str, path : str, datastore : Datastore):
+    super().__init__(nickname, token, datastore)
 
     self.logger : logging.Logger = logging.getLogger('bot')
     c_handler = logging.StreamHandler()
@@ -47,7 +50,6 @@ class MyBot(libtwitch.Bot):
       return False
 
     self.logger.debug("Successfully loaded config.")
-    self.config = config
     return True
 
   def on_command(self, msg : libtwitch.BotMessage, cmd : str, args : list[str]) -> None:
@@ -125,7 +127,17 @@ class MyBot(libtwitch.Bot):
 
 if __name__ == '__main__':
   load_dotenv()
-  bot = MyBot(os.getenv('NICKNAME'), os.getenv('CHAT_TOKEN'), "config")
+
+  r = None
+  if os.getenv('USE_REDIS') == 'True':
+    r = Redis(host=os.getenv('REDIS_HOST'), port=int(os.getenv('REDIS_PORT')))
+
+  datastore = FileDatastore("./data", r)
+  bot = MyBot(
+    os.getenv('NICKNAME'),
+    os.getenv('CHAT_TOKEN'),
+    "./config",
+    datastore)
   # Commands
   bot.load_extension("8ball")
 
