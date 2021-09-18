@@ -4,7 +4,7 @@ from typing import Union
 
 from libtwitch.bot import BotMessage
 from libtwitch.moderation_action import ModerationAction
-from libtwitch.core import IrcChannel, IrcChatter
+from libtwitch.irc import IrcChannel, IrcChatter
 
 class PluginEvent(Enum):
   # Bot events
