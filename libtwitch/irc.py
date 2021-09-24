@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass
 from queue import Queue
 
-from enum import IntFlag, unique
+from enum import Enum, IntFlag, unique
 from typing import Optional, Union
 from time import sleep
 import socket
@@ -17,6 +18,7 @@ RATE_MODERATOR = 100 / 30  # messages per second
 
 RE_TAG_PART = r"(?:@([^\s=;]+=[^\s;]*(?:;(?:[^\s=;]+=[^\s;]*))*))?\s?"
 RE_CHAT_MSG = r"^%s:([^\s!]+)!(?:[^\s@]+)@(?:[^\s\.]+)(?:\.tmi\.twitch\.tv PRIVMSG) #([^\s!]+) :(.+)$" % RE_TAG_PART
+RE_USERNOTICE = r"^%s:(?:tmi\.twitch\.tv USERNOTICE) #([^\s!]+)(?: :(.+))?$" % RE_TAG_PART
 RE_ROOMSTATE = r"^%s:(?:tmi\.twitch\.tv ROOMSTATE) #([^\s!]+)$" % RE_TAG_PART
 RE_JOIN = r"^:([^\s!]+)!(?:[^\s@]+)@(?:[^\s\.]+)(?:\.tmi\.twitch\.tv JOIN) #([^\s!]+)$"
 RE_PART = r"^:([^\s!]+)!(?:[^\s@]+)@(?:[^\s\.]+)(?:\.tmi\.twitch\.tv PART) #([^\s!]+)$"
@@ -141,6 +143,19 @@ class IrcConnection:
     tags = self._parse_tags(tags_str)
     channel.handle_roomstate(tags)
 
+  def _handle_usernotice(self, match):
+    tags_str = match[1]
+    channel_name = match[2]
+    text = None
+    if match[3] is not None:
+      text = match[3].strip()
+
+    if not channel_name in self._channels:
+      return
+    channel = self._channels[channel_name]
+    tags = self._parse_tags(tags_str)
+    channel.handle_usernotice(text, tags)
+
   def _read_line(self) -> str:
     if len(self._back_buffer) == 0 or (len(self._back_buffer) == 1 and not self._back_buffer[0].endswith(b'\n')):
       buffer = self._socket.recv(1024)
@@ -207,6 +222,10 @@ class IrcConnection:
     self._ingress_thread.join()
     self._egress_thread.join()
     return True
+
+  @property
+  def is_running(self) -> bool:
+    return self._running
 
   def on_ready(self):
     pass
@@ -369,6 +388,87 @@ class IrcChannel:
     self._connection.on_roomstate(self, tags)
     self.tags = tags
 
+  def _hande_sub(self, text, tags): # sub and resub
+    total_months = int(tags['msg-param-cumulative-months'])
+    streak_share = bool(tags['msg-param-should-share-streak'])
+    streak_months = int(tags['msg-param-streak-months'])
+    tier_str = tags['msg-param-sub-plan']
+    tier_name = tags['msg-param-sub-plan-name']
+    # TODO: event
+    pass
+
+  def _handle_subgift(self, text, tags): # subgift and anon-subgift
+    total_months = int(tags['msg-param-months'])
+    recipient_display = tags['msg-param-recipient-display-name']
+    recipient_id = tags['msg-param-recipient-id']
+    recipient_login = tags['msg-param-recipient-name']
+    tier_str = tags['msg-param-sub-plan']
+    tier_name = tags['msg-param-sub-plan-name']
+    #gift_months = int(tags['msg-param-gift-months'])
+    # TODO: event
+    pass
+
+  def _handle_submysterygift(self, text, tags):
+    pass
+
+  def _handle_rewardgift(self, text, tags):
+    pass
+
+  def _handle_raid(self, text, tags):
+    display = tags['msg-param-displayName']
+    login = tags['msg-param-login']
+    viewers = int(tags['msg-param-viewerCount'])
+    # TODO: event
+    pass
+
+  def _handle_unraid(self, text, tags):
+    pass
+
+  def _handle_giftpaidupgrade(self, text, tags): # giftpaidupgrade and anon-giftpaidupgrade
+    total = int(tags['msg-param-promo-gift-total'])
+    promo_name = tags['msg-param-promo-name']
+    login = tags['msg-param-sender-login']
+    display = tags['msg-param-sender-name']
+    # TODO: Parse
+    # TODO: event
+    pass
+
+  def _handle_ritual(self, text, tags): # ritual
+    ritual_name = tags['msg-param-ritual-name']
+    # TODO: event
+    pass
+
+  def _handle_bitsbadgetier(self, text, tags):
+    threshold = tags['msg-param-threshold']
+    # TODO: event
+    pass
+
+  def handle_usernotice(self, text, tags):
+    if not "msg-id" in tags:
+      return
+
+    msg_type = tags["msg-id"]
+    if msg_type == "sub" or msg_type == "resub":
+      self._hande_sub(text, tags)
+    elif msg_type == "subgift" or msg_type == "anonsubgift":
+      self._handle_subgift(text, tags)
+    elif msg_type == "submysterygift":
+      self._handle_submysterygift(text, tags)
+    elif msg_type == "giftpaidupgrade" or msg_type == "anongiftpaidupgrade":
+      self._handle_giftpaidupgrade(text, tags)
+    elif msg_type == "rewardgift":
+      self._handle_rewardgift(text, tags)
+    elif msg_type == "raid":
+      self._handle_raid(text, tags)
+    elif msg_type == "unraid":
+      self._handle_unraid(text, tags)
+    elif msg_type == "ritual":
+      self._handle_ritual(text, tags)
+    elif msg_type == "bitsbadgetier":
+      self._handle_bitsbadgetier(text, tags)
+    else:
+      print("Unknown usernotice type %s" % msg_type)
+
 class IrcChatter:
   def __init__(self, channel : IrcChannel, name : str):
     self.channel : IrcChannel = channel
@@ -414,3 +514,39 @@ class ChatEvent:
   def __init__(self, channel : IrcChannel, chatter : IrcChatter):
     self.channel = channel
     self.chatter = chatter
+
+@unique
+class SubscriptionTier(Enum):
+  Prime = 0
+  Tier1 = 1000
+  Tier2 = 2000
+  Tier3 = 3000
+
+@dataclass
+class SubEvent:
+  total_months : int = 0
+  streak_share : bool = False
+  streak_months : int = 0
+  tier : SubscriptionTier = SubscriptionTier.Prime
+  tier_name : str = "Prime"
+
+@dataclass
+class SubGiftEvent:
+  total_months : int = 0
+  recipient_display : str = None
+  recipient_id : str = None
+  recipient_login : str = None
+  tier : SubscriptionTier = SubscriptionTier.Prime
+  tier_name : str = "Prime"
+  gift_months : int = 0
+
+@dataclass
+class RaidEvent:
+  def __init__(self, login : str, display : str, viewers : int):
+    self.display = display
+    self.login = login
+    self.viewers = viewers
+
+  display : str = None
+  login : str = None
+  viewers : int = 0
