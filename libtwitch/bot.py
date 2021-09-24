@@ -206,7 +206,10 @@ class Bot(libtwitch.IrcConnection):
       msg.moderation_action = harshest_action
 
   def on_message(self, msg : BotMessage):
-    self._on_event(libtwitch.PluginEvent.Message.Message, msg)
+    self._on_event(libtwitch.PluginEvent.Message, msg)
+
+  def on_roomstate(self, channel : IrcChannel, tags : dict[str, str]):
+    self._on_event(libtwitch.PluginEvent.RoomstateChange, channel, tags)
 
   def on_privmsg(self, raw_msg : libtwitch.IrcMessage):
     msg = BotMessage.from_raw_message(raw_msg)

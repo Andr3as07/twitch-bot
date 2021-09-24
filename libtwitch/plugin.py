@@ -28,6 +28,7 @@ class PluginEvent(Enum):
   Message = auto()
   Command = auto()
   Whisper = auto() # TODO
+  RoomstateChange = auto()
 
   # Community events
   Bits = auto()
@@ -86,6 +87,8 @@ class Plugin:
       self.on_message(args[0])
     elif plugin_event == PluginEvent.Command:
       self.on_command(args[0], args[1], args[2])
+    elif plugin_event == PluginEvent.RoomstateChange:
+      self.on_roomstate(args[0], args[1])
 
     # Plugin events
     elif plugin_event == PluginEvent.SelfLoad:
@@ -187,6 +190,13 @@ class Plugin:
     :param message: the received message
     :param cmd: the recognized command name
     :param args: the parsed arguments of the command
+    """
+
+  def on_roomstate(self, channel : IrcChannel, tags : dict[str, str]):
+    """
+    called when the state of a channel changes
+    :param channel: the channel that changed
+    :param tags: the new set of tags that are applied
     """
 
   # Plugin events

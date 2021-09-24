@@ -17,6 +17,7 @@ RATE_MODERATOR = 100 / 30  # messages per second
 
 RE_TAG_PART = r"(?:@([^\s=;]+=[^\s;]*(?:;(?:[^\s=;]+=[^\s;]*))*))?\s?"
 RE_CHAT_MSG = r"^%s:([^\s!]+)!(?:[^\s@]+)@(?:[^\s\.]+)(?:\.tmi\.twitch\.tv PRIVMSG) #([^\s!]+) :(.+)$" % RE_TAG_PART
+RE_ROOMSTATE = r"^%s:(?:tmi\.twitch\.tv ROOMSTATE) #([^\s!]+)$" % RE_TAG_PART
 RE_JOIN = r"^:([^\s!]+)!(?:[^\s@]+)@(?:[^\s\.]+)(?:\.tmi\.twitch\.tv JOIN) #([^\s!]+)$"
 RE_PART = r"^:([^\s!]+)!(?:[^\s@]+)@(?:[^\s\.]+)(?:\.tmi\.twitch\.tv PART) #([^\s!]+)$"
 
@@ -131,6 +132,15 @@ class IrcConnection:
     channel = self._channels[channelname]
     channel.handle_part(username)
 
+  def _handle_roomstate(self, match):
+    tags_str = match[1]
+    channel_name = match[2]
+    if not channel_name in self._channels:
+      return
+    channel = self._channels[channel_name]
+    tags = self._parse_tags(tags_str)
+    channel.handle_roomstate(tags)
+
   def _read_line(self) -> str:
     if len(self._back_buffer) == 0 or (len(self._back_buffer) == 1 and not self._back_buffer[0].endswith(b'\n')):
       buffer = self._socket.recv(1024)
@@ -140,26 +150,35 @@ class IrcConnection:
     self._back_buffer.pop(0)
     return line.decode("utf-8")
 
+  def _handle_response(self, response):
+    self.on_raw_ingress(response)
+    message_match = re.match(RE_CHAT_MSG, response)
+    if response == "PING :tmi.twitch.tv":  # On Ping
+      self.send("PONG :tmi.twitch.tv")
+      return
+    if message_match is not None:  # On Message
+      self._handle_message(message_match)
+    else:  # Other message
+      join_match = re.match(RE_JOIN, response)
+      part_match = re.match(RE_PART, response)
+      roomstate_match = re.match(RE_ROOMSTATE, response)
+      usernotice_match = re.match(RE_USERNOTICE, response)
+      if join_match is not None:  # On Join
+        self._handle_join(join_match)
+      elif part_match is not None:  # On Part
+        self._handle_part(part_match)
+      elif roomstate_match is not None:
+        self._handle_roomstate(roomstate_match)
+      elif usernotice_match is not None:
+        self._handle_usernotice(usernotice_match)
+      else:
+        self.on_unknown(response)
+
   def _ingress_thread_func(self):
     # TODO: Error
     while self._running:
       response = self._read_line()
-      self.on_raw_ingress(response)
-      message_match = re.match(RE_CHAT_MSG, response)
-      if response == "PING :tmi.twitch.tv": # On Ping
-        self.send("PONG :tmi.twitch.tv")
-        continue
-      if message_match is not None: # On Message
-        self._handle_message(message_match)
-      else: # Other message
-        join_match = re.match(RE_JOIN, response)
-        part_match = re.match(RE_PART, response)
-        if join_match is not None: # On Join
-          self._handle_join(join_match)
-        elif part_match is not None: # On Part
-          self._handle_part(part_match)
-        else:
-          self.on_unknown(response)
+      self._handle_response(response)
 
   def _egress_thread_func(self):
     while self._running:
@@ -228,6 +247,9 @@ class IrcConnection:
   def on_privmsg(self, msg : IrcMessage):
     pass
 
+  def on_roomstate(self, channel : IrcChannel, tags : dict[str, str]):
+    pass
+
 def _update_chatter_type_enum(chatter : IrcChatter, chatter_type : ChatterType, value : bool) -> None:
   if value:
     chatter.type |= chatter_type
@@ -255,7 +277,13 @@ class IrcChannel:
   def __init__(self, connection : IrcConnection, name : str):
     self._connection = connection
     self.name = name
+    self.emote_only = False
+    self.follower_only : int = -1
+    self.subs_only = False
+    self.slow = 0
+    self.r9k = 0
     self._chatters = {}
+    self.tags = {}
 
   def part(self) -> None:
     self._connection.part_channel(self)
@@ -326,6 +354,20 @@ class IrcChannel:
 
   def __repr__(self):
     return str(self)
+
+  def handle_roomstate(self, tags : dict[str, str]):
+    if "emote-only" in tags:
+      self.emote_only = tags["emote-only"] == "1"
+    if "followers-only" in tags:
+      self.follower_only = int(tags["followers-only"])
+    if "r9k" in tags:
+      self.r9k = tags["r9k"] == "1"
+    if "slow" in tags:
+      self.slow = int(tags["slow"])
+    if "subs-only" in tags:
+      self.subs_only = tags["subs-only"] == "1"
+    self._connection.on_roomstate(self, tags)
+    self.tags = tags
 
 class IrcChatter:
   def __init__(self, channel : IrcChannel, name : str):
