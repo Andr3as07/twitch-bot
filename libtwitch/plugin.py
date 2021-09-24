@@ -38,7 +38,6 @@ class PluginEvent(Enum):
 
   # Community events
   Bits = auto()
-  Raid = auto()
   Subscribe = auto()
 
   # Plugin events
