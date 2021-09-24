@@ -1,17 +1,38 @@
 import json
+import threading
 from datetime import datetime
-from enum import Enum, unique
+from enum import Enum, IntEnum, auto, unique
 from typing import Optional, Union
 from dataclasses import dataclass
+from queue import PriorityQueue
 
 import requests
 from redis import Redis
 from requests import Response
-from twitch.tmi import Chatter
+
+from libtwitch.irc import IrcChatter
 
 BASE_URL = "https://api.twitch.tv/helix"
 
-RequestUserType = Union[str, int, Chatter]
+RequestUserType = Union[str, int, IrcChatter]
+
+@unique
+class RequestPriority(IntEnum):
+  High = 0
+  Medium = 10
+  Low = 20
+
+@unique
+class RequestRatelimitBehaviour(IntEnum):
+  Mandatory = 0
+  Optional = 1
+
+@unique
+class RequestCacheBehaviour(IntEnum):
+  NoCache = 0
+  CacheOnRatelimit = 3
+  CacheOnFail = 4
+  CacheFirst = 5
 
 @unique
 class BroadcasterType(Enum):
@@ -47,16 +68,16 @@ class Follow:
 @dataclass
 class User:
   def __init__(self, jdata):
-    self.offline_image_url = jdata['offline_image_url']
-    self.profile_image_url = jdata['profile_image_url']
-    self.broadcaster_type = None  # TODO
-    self.display_name = jdata['display_name']
-    self.description = jdata['description']
-    self.created_at = None  # TODO
-    self.view_count = int(jdata['view_count'])
-    self.login = jdata['login']
-    self.type = None  # TODO
-    self.id = int(jdata['id'])
+    self.offline_image_url : str = jdata['offline_image_url']
+    self.profile_image_url : str = jdata['profile_image_url']
+    self.broadcaster_type : BroadcasterType = BroadcasterType.Nothing  # TODO
+    self.display_name : str = jdata['display_name']
+    self.description : str = jdata['description']
+    self.created_at : datetime = None  # TODO
+    self.view_count : int = int(jdata['view_count'])
+    self.login : str = jdata['login']
+    self.type : UserType = UserType.Nothing  # TODO
+    self.id : int = int(jdata['id'])
 
   offline_image_url : str = None
   profile_image_url : str = None
@@ -75,19 +96,31 @@ class User:
     return self.login
 
 class TwitchAPIClient:
-  def __init__(self, client_id : str, token : str, cache_duration : int = 60, redis = Optional[Redis]):
+  def __init__(self, client_id : str, token : str, cache_duration : int = 60, redis : Optional[Redis] = None):
     self._client_id : str = client_id
     self._token : str = token
     self._redis : Optional[Redis] = redis
     self._cache_duration : int = cache_duration
 
-  def _get_request_web(self, url : str) -> Response:
+    self._queue : PriorityQueue = PriorityQueue()
+    self._queue_lock : threading.Lock = threading.Lock()
+
+    self._request_thread : Optional[threading.Thread] = None
+    self._running : bool = False
+
+  def _queue_request(self, priority : int, url : str, callback):
+    with self._queue_lock:
+      print("_queue_request: priority=%s, url=%s" % (priority, url))
+      self._queue.put((priority, url, callback))
+
+  def _get_request_web(self, url : str, callback : callable = None) -> None:
     headers = {
       'Authorization': "Bearer %s" % self._token,
       'Client-ID': self._client_id
     }
 
-    return requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers)
+    callback(response)
 
   def _get_request_redis(self, url : str) -> Optional[dict]:
     if self._redis is None:
@@ -105,25 +138,44 @@ class TwitchAPIClient:
 
     self._redis.setex("GET %s" % url, self._cache_duration, json.dumps(response.json()))
 
-  def _get_request(self, url : str) -> dict:
+  @staticmethod
+  def _calc_queue_priority(priority : RequestPriority, ratelimit_behaviour : RequestRatelimitBehaviour, cache_behaviour : RequestCacheBehaviour) -> int:
+    return int(priority) + int(ratelimit_behaviour) + int(cache_behaviour)
+
+  def _get_request(self, url : str, callback : callable = None,
+                   priority : RequestPriority = RequestPriority.Low,
+                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst):
+    # TODO: Respect Cache behaviour
     result = self._get_request_redis(url)
     if result is not None:
-      return result
+      return callback(True, result)
 
-    response = self._get_request_web(url)
-    # TODO: Handle errors
+    def on_web_callback(response):
+      # TODO: Handle errors
+      self._get_request_redis_set(url, response)
 
-    self._get_request_redis_set(url, response)
+      return callback(False, response.json())
 
-    return response.json()
+    queue_priority = self._calc_queue_priority(priority, ratelimit_behaviour, cache_behaviour)
+    self._queue_request(queue_priority, url, on_web_callback)
 
-  def get_user(self, user : RequestUserType) -> Optional[User]:
-    users = self.get_users([user])
-    if len(users) < 1:
-      return None
-    return users[user]
+  def get_user(self, user : RequestUserType, callback : callable,
+                   priority : RequestPriority = RequestPriority.Low,
+                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst) -> None:
 
-  def get_users(self, users : list[RequestUserType]) -> Optional[dict[RequestUserType, User]]:
+    def get_users_callback(is_cached, users):
+      if users is None or len(users) < 1 or not user in users:
+        callback(is_cached, None)
+      callback(is_cached, users[user])
+
+    self.get_users([user], get_users_callback, priority, ratelimit_behaviour, cache_behaviour)
+
+  def get_users(self, users : list[RequestUserType], callback : callable,
+                   priority : RequestPriority = RequestPriority.Low,
+                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst) -> None:
     url = BASE_URL + "/users"
 
     if len(users) > 100:
@@ -139,47 +191,55 @@ class TwitchAPIClient:
 
       if isinstance(user, int):
         url += "id=%s" % user
-      elif isinstance(user, Chatter):
+      elif isinstance(user, IrcChatter):
         url += "login=%s" % user.name
       elif isinstance(user, str):
         url += "login=%s" % user
       else:
         raise RuntimeError()
 
-    jdata = self._get_request(url)
+    def on_request_callback(is_cached, jdata):
+      response_dict = {}
+      jusers = jdata["data"]
+
+      for juser in jusers:
+        user = User(juser)
+
+        for key in users:
+          if isinstance(key, int) and key == user.id:
+            response_dict[key] = user
+            break
+          elif isinstance(key, IrcChatter) and key.name == user.login:
+            response_dict[key] = user
+            break
+          elif isinstance(key, str) and key.lower() == user.login:
+            response_dict[key] = user
+            break
+
+      callback(is_cached, response_dict)
+
+    self._get_request(url, on_request_callback, priority, ratelimit_behaviour, cache_behaviour)
     # TODO: Handle error response
 
-    response_dict = {}
-    jusers = jdata["data"]
-
-    for juser in jusers:
-      user = User(juser)
-
-      for key in users:
-        if isinstance(key, int) and key == user.id:
-          response_dict[key] = user
-          continue
-        elif isinstance(key, Chatter) and key.name == user.login:
-          response_dict[key] = user
-          continue
-        elif isinstance(key, str) and key == user.login:
-          response_dict[key] = user
-          continue
-
-    return response_dict
-
-  def get_follow(self, from_user : int, to_user : int) -> Optional[Follow]:
+  def get_follow(self, from_user : int, to_user : int, callback : callable,
+                   priority : RequestPriority = RequestPriority.Low,
+                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst) -> None:
     url = BASE_URL + "/users/follows?from_id=%s&to_id=%s" % (from_user, to_user)
 
-    jdata = self._get_request(url)
+    def on_request_callback(is_cached, jdata):
+      if len(jdata['data']) == 0:
+        callback(is_cached, None)
+
+      callback(is_cached, Follow(jdata['data'][0]))
+
+    self._get_request(url, on_request_callback, priority, ratelimit_behaviour, cache_behaviour)
     # TODO: Handle error response
 
-    if len(jdata['data']) == 0:
-      return None
-
-    return Follow(jdata['data'][0])
-
-  def get_follows(self, *, from_user : Optional[int] = None, to_user : Optional[int] = None, after : Optional[str] = None) -> (list[Follow], int, Optional[str]):
+  def get_follows(self, callback : callable, from_user : Optional[int] = None, to_user : Optional[int] = None, after : Optional[str] = None,
+                   priority : RequestPriority = RequestPriority.Low,
+                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst):
     if from_user is None and to_user is None:
       raise RuntimeError()
 
@@ -192,18 +252,49 @@ class TwitchAPIClient:
     if after is not None:
       url += "&after=%s" % after
 
-    jdata = self._get_request(url)
+    def on_request_callback(is_cached, jdata):
+      result = []
+      if len(jdata['data']) == 0:
+        callback(is_cached, result, 0, None)
+
+      for jfollow in jdata['data']:
+        result.append(Follow(jfollow))
+
+      cursor = None
+      if 'cursor' in jdata['pagination']:
+        cursor = jdata['pagination']['cursor']
+
+      callback(is_cached, result, jdata['total'], cursor)
+
+    self._get_request(url, on_request_callback, priority, ratelimit_behaviour, cache_behaviour)
     # TODO: Handle error response
 
-    result = []
-    if len(jdata['data']) == 0:
-      return result, 0, None
+  def _request_thread_func(self):
+    while self._running:
+      item = self._queue.get()
+      with self._queue_lock:
+        priority : int = item[0]
+        url : str = item[1]
+        callback : callable = item[2]
 
-    for jfollow in jdata['data']:
-      result.append(Follow(jfollow))
+        self._get_request_web(url, callback)
+        self._queue.task_done()
 
-    cursor = None
-    if 'cursor' in jdata['pagination']:
-      cursor = jdata['pagination']['cursor']
+  def start(self):
+    if self._running:
+      return False
+    self._running = True
+    self._request_thread = threading.Thread(target=self._request_thread_func)
+    self._request_thread.start()
+    return True
 
-    return result, jdata['total'], cursor
+  def stop(self):
+    if not self._running:
+      return False
+    self._running = False
+    self._request_thread.json()
+    return True
+
+  @property
+  def is_running(self) -> bool:
+    return self._running
