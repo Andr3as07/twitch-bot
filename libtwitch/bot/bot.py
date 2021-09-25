@@ -1,11 +1,11 @@
 from __future__ import annotations
 import importlib
 import sys
-from typing import Any, Optional, Union
+from typing import Any
 
 import libtwitch
-from libtwitch import IrcChannel, IrcChatter, IrcMessage
-from libtwitch.datastore import Datastore
+from libtwitch import IrcChannel
+from libtwitch.datastore.datastore import Datastore
 
 class Bot(libtwitch.IrcConnection):
   def __init__(self, nickname : str, token : str, store : Datastore):
@@ -168,7 +168,7 @@ class Bot(libtwitch.IrcConnection):
     self._on_event(libtwitch.PluginEvent.Message.ChatterPart, part_event)
     self.datastore.sync()
 
-  def _handle_command(self, msg : BotMessage):
+  def _handle_command(self, msg : libtwitch.BotMessage):
     if not msg.text.startswith('?'):
       return False
 
@@ -186,10 +186,10 @@ class Bot(libtwitch.IrcConnection):
     self.on_command(msg, cmd, args)
     return True
 
-  def on_command(self, msg : BotMessage, cmd : str, args : list[str]):
+  def on_command(self, msg : libtwitch.BotMessage, cmd : str, args : list[str]):
     self._on_event(libtwitch.PluginEvent.Command, msg, cmd, args)
 
-  def _moderate(self, msg : BotMessage):
+  def _moderate(self, msg : libtwitch.BotMessage):
     if msg.author.has_type(libtwitch.ChatterType.Broadcaster) or \
       msg.author.has_type(libtwitch.ChatterType.Twitch) or \
       msg.author.has_type(libtwitch.ChatterType.Moderator):
@@ -205,14 +205,14 @@ class Bot(libtwitch.IrcConnection):
     if harshest_action is not None:
       msg.moderation_action = harshest_action
 
-  def on_message(self, msg : BotMessage):
+  def on_message(self, msg : libtwitch.BotMessage):
     self._on_event(libtwitch.PluginEvent.Message, msg)
 
   def on_roomstate(self, channel : IrcChannel, tags : dict[str, str]):
     self._on_event(libtwitch.PluginEvent.RoomstateChange, channel, tags)
 
   def on_privmsg(self, raw_msg : libtwitch.IrcMessage):
-    msg = BotMessage.from_raw_message(raw_msg)
+    msg = libtwitch.BotMessage.from_raw_message(raw_msg)
 
     # Ignore self (echo)
     if msg.author.name.strip().lower() == self.nickname:
@@ -240,34 +240,3 @@ class Bot(libtwitch.IrcConnection):
   @staticmethod
   def get_data_dir():
     return "./data"
-
-class BotMessage(IrcMessage):
-  @classmethod
-  def from_raw_message(cls, msg : IrcMessage) -> BotMessage:
-    return BotMessage(msg.channel, msg.author, msg.text, msg.tags)
-
-  def __init__(self, channel : IrcChannel, author : IrcChatter, text : str, tags : dict[str, str]):
-    super().__init__(channel, author, text, tags)
-
-    self.response : Optional[str] = None
-    self.moderation_action : Optional[libtwitch.ModerationAction] = None
-    self.custom_data : dict[str, Any] = {}
-
-  def get_response(self) -> str:
-    if self.moderation_action is not None and self.moderation_action.response is not None:
-      return self.moderation_action.response
-    return self.response
-
-  def invoke(self) -> None:
-    from libtwitch import ModerationActionType
-
-    if self.moderation_action is None:
-      return
-
-    action_type: ModerationActionType = self.moderation_action.action
-    if action_type == ModerationActionType.RemoveMessage:
-      self.delete()
-    elif action_type == ModerationActionType.Timeout:
-      self.author.timeout(self.moderation_action.duration, self.moderation_action.reason)
-    elif action_type == ModerationActionType.Ban:
-      self.author.ban(self.moderation_action.reason)

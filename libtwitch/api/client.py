@@ -1,99 +1,18 @@
 import json
 import threading
-from datetime import datetime
-from enum import Enum, IntEnum, auto, unique
 from typing import Optional, Union
-from dataclasses import dataclass
 from queue import PriorityQueue
 
 import requests
 from redis import Redis
 from requests import Response
 
-from libtwitch.irc import IrcChatter
+import libtwitch
+from libtwitch import IrcChatter
 
 BASE_URL = "https://api.twitch.tv/helix"
 
 RequestUserType = Union[str, int, IrcChatter]
-
-@unique
-class RequestPriority(IntEnum):
-  High = 0
-  Medium = 10
-  Low = 20
-
-@unique
-class RequestRatelimitBehaviour(IntEnum):
-  Mandatory = 0
-  Optional = 1
-
-@unique
-class RequestCacheBehaviour(IntEnum):
-  NoCache = 0
-  CacheOnRatelimit = 3
-  CacheOnFail = 4
-  CacheFirst = 5
-
-@unique
-class BroadcasterType(Enum):
-  Nothing = ""
-  Affiliate = "affiliate"
-  Partner = "partner"
-
-@unique
-class UserType(Enum):
-  Nothing = ""
-  GlobalMod = "global_mod"
-  Admin = "admin"
-  Staff = "staff"
-
-@dataclass
-class Follow:
-  def __init__(self, jdata):
-    self.from_id = int(jdata['from_id'])
-    self.to_id = int(jdata['to_id'])
-    self.from_login = jdata['from_login']
-    self.to_login = jdata['to_login']
-    self.from_name = jdata['from_name']
-    self.to_name = jdata['to_name']
-
-  followed_at : datetime = None
-  from_login : str = None
-  from_name : str = None
-  from_id : int = -1
-  to_login : str = None
-  to_name : str = None
-  to_id : int = -1
-
-@dataclass
-class User:
-  def __init__(self, jdata):
-    self.offline_image_url : str = jdata['offline_image_url']
-    self.profile_image_url : str = jdata['profile_image_url']
-    self.broadcaster_type : BroadcasterType = BroadcasterType.Nothing  # TODO
-    self.display_name : str = jdata['display_name']
-    self.description : str = jdata['description']
-    self.created_at : datetime = None  # TODO
-    self.view_count : int = int(jdata['view_count'])
-    self.login : str = jdata['login']
-    self.type : UserType = UserType.Nothing  # TODO
-    self.id : int = int(jdata['id'])
-
-  offline_image_url : str = None
-  profile_image_url : str = None
-  broadcaster_type : BroadcasterType = BroadcasterType.Nothing
-  display_name : str = None
-  description : str = None
-  created_at : datetime = None
-  view_count : str = -1
-  login : str = None
-  type : UserType = UserType.Nothing
-  id : int = -1
-
-  def get_display_name(self):
-    if self.display_name is not None:
-      return self.display_name
-    return self.login
 
 class TwitchAPIClient:
   def __init__(self, client_id : str, token : str, cache_duration : int = 60, redis : Optional[Redis] = None):
@@ -139,13 +58,15 @@ class TwitchAPIClient:
     self._redis.setex("GET %s" % url, self._cache_duration, json.dumps(response.json()))
 
   @staticmethod
-  def _calc_queue_priority(priority : RequestPriority, ratelimit_behaviour : RequestRatelimitBehaviour, cache_behaviour : RequestCacheBehaviour) -> int:
+  def _calc_queue_priority(priority : libtwitch.RequestPriority,
+                           ratelimit_behaviour : libtwitch.RequestRatelimitBehaviour,
+                           cache_behaviour : libtwitch.RequestCacheBehaviour) -> int:
     return int(priority) + int(ratelimit_behaviour) + int(cache_behaviour)
 
   def _get_request(self, url : str, callback : callable = None,
-                   priority : RequestPriority = RequestPriority.Low,
-                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
-                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst):
+                   priority : libtwitch.RequestPriority = libtwitch.RequestPriority.Low,
+                   ratelimit_behaviour : libtwitch.RequestRatelimitBehaviour = libtwitch.RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : libtwitch.RequestCacheBehaviour = libtwitch.RequestCacheBehaviour.CacheFirst):
     # TODO: Respect Cache behaviour
     result = self._get_request_redis(url)
     if result is not None:
@@ -161,9 +82,9 @@ class TwitchAPIClient:
     self._queue_request(queue_priority, url, on_web_callback)
 
   def get_user(self, user : RequestUserType, callback : callable,
-                   priority : RequestPriority = RequestPriority.Low,
-                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
-                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst) -> None:
+                   priority : libtwitch.RequestPriority = libtwitch.RequestPriority.Low,
+                   ratelimit_behaviour : libtwitch.RequestRatelimitBehaviour = libtwitch.RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : libtwitch.RequestCacheBehaviour = libtwitch.RequestCacheBehaviour.CacheFirst) -> None:
 
     def get_users_callback(is_cached, users):
       if users is None or len(users) < 1 or not user in users:
@@ -173,9 +94,9 @@ class TwitchAPIClient:
     self.get_users([user], get_users_callback, priority, ratelimit_behaviour, cache_behaviour)
 
   def get_users(self, users : list[RequestUserType], callback : callable,
-                   priority : RequestPriority = RequestPriority.Low,
-                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
-                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst) -> None:
+                   priority : libtwitch.RequestPriority = libtwitch.RequestPriority.Low,
+                   ratelimit_behaviour : libtwitch.RequestRatelimitBehaviour = libtwitch.RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : libtwitch.RequestCacheBehaviour = libtwitch.RequestCacheBehaviour.CacheFirst) -> None:
     url = BASE_URL + "/users"
 
     if len(users) > 100:
@@ -203,7 +124,7 @@ class TwitchAPIClient:
       jusers = jdata["data"]
 
       for juser in jusers:
-        user = User(juser)
+        user = libtwitch.User(juser)
 
         for key in users:
           if isinstance(key, int) and key == user.id:
@@ -222,24 +143,24 @@ class TwitchAPIClient:
     # TODO: Handle error response
 
   def get_follow(self, from_user : int, to_user : int, callback : callable,
-                   priority : RequestPriority = RequestPriority.Low,
-                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
-                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst) -> None:
+                   priority : libtwitch.RequestPriority = libtwitch.RequestPriority.Low,
+                   ratelimit_behaviour : libtwitch.RequestRatelimitBehaviour = libtwitch.RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : libtwitch.RequestCacheBehaviour = libtwitch.RequestCacheBehaviour.CacheFirst) -> None:
     url = BASE_URL + "/users/follows?from_id=%s&to_id=%s" % (from_user, to_user)
 
     def on_request_callback(is_cached, jdata):
       if len(jdata['data']) == 0:
         callback(is_cached, None)
 
-      callback(is_cached, Follow(jdata['data'][0]))
+      callback(is_cached, libtwitch.Follow(jdata['data'][0]))
 
     self._get_request(url, on_request_callback, priority, ratelimit_behaviour, cache_behaviour)
     # TODO: Handle error response
 
   def get_follows(self, callback : callable, from_user : Optional[int] = None, to_user : Optional[int] = None, after : Optional[str] = None,
-                   priority : RequestPriority = RequestPriority.Low,
-                   ratelimit_behaviour : RequestRatelimitBehaviour = RequestRatelimitBehaviour.Mandatory,
-                   cache_behaviour : RequestCacheBehaviour = RequestCacheBehaviour.CacheFirst):
+                   priority : libtwitch.RequestPriority = libtwitch.RequestPriority.Low,
+                   ratelimit_behaviour : libtwitch.RequestRatelimitBehaviour = libtwitch.RequestRatelimitBehaviour.Mandatory,
+                   cache_behaviour : libtwitch.RequestCacheBehaviour = libtwitch.RequestCacheBehaviour.CacheFirst):
     if from_user is None and to_user is None:
       raise RuntimeError()
 
@@ -258,7 +179,7 @@ class TwitchAPIClient:
         callback(is_cached, result, 0, None)
 
       for jfollow in jdata['data']:
-        result.append(Follow(jfollow))
+        result.append(libtwitch.Follow(jfollow))
 
       cursor = None
       if 'cursor' in jdata['pagination']:
@@ -292,7 +213,7 @@ class TwitchAPIClient:
     if not self._running:
       return False
     self._running = False
-    self._request_thread.json()
+    self._request_thread.join()
     return True
 
   @property

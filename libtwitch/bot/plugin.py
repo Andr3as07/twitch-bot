@@ -1,50 +1,10 @@
+from __future__ import annotations
+
 import os
-from enum import Enum, auto
 from typing import Union
 
-from libtwitch.bot import BotMessage
-from libtwitch.moderation_action import ModerationAction
-from libtwitch.irc import IrcChannel, IrcChatter
-
-class PluginEvent(Enum):
-  # Bot events
-  Destruct = auto()
-
-  # IRC events
-  RawIngress = auto()
-  RawEgress = auto() # This is considered dangerous
-  Connect = auto()
-  Disconnect = auto()
-  Error = auto() # TODO
-  ErrorBaned = auto() # TODO
-  ErrorTimedOut = auto() # TODO
-  Unknown = auto()
-  ChannelJoin = auto()
-  ChannelPart = auto()
-  ChatterJoin = auto()
-  ChatterPart = auto()
-  Moderate = auto()
-  Privmsg = auto()
-  Message = auto()
-  Command = auto()
-  Whisper = auto() # TODO
-  RoomstateChange = auto()
-  Subscription = auto() # TODO
-  SubGift = auto() # TODO
-  Raid = auto() # TODO
-  Unraid = auto() # TODO
-  Ritual = auto() # TODO
-  BitsBadgeTier = auto() # TODO
-
-  # Community events
-  Bits = auto()
-  Subscribe = auto()
-
-  # Plugin events
-  SelfLoad = auto()
-  SelfUnload = auto()
-  PluginLoad = auto()
-  PluginUnload = auto()
+import libtwitch
+from libtwitch import PluginEvent
 
 DEFAULT_PLUGIN_NAME = 'UNNAMED PLUGIN'
 
@@ -60,7 +20,7 @@ class Plugin:
   def __init__(self, bot):
     self.bot = bot
 
-  def on_event(self, plugin_event : PluginEvent, *args, **kwargs) -> Union[None, ModerationAction]:
+  def on_event(self, plugin_event : PluginEvent, *args, **kwargs) -> Union[None, libtwitch.ModerationAction]:
     # Bot events
     if plugin_event == PluginEvent.Destruct:
       self.on_destruct()
@@ -142,31 +102,31 @@ class Plugin:
     :param data: the raw data formatted as a utf-8 string
     """
 
-  def on_channel_join(self, channel : IrcChannel):
+  def on_channel_join(self, channel : libtwitch.IrcChannel):
     """
     triggered when the bot connects to a channel
     :param channel: the joined channel
     """
 
-  def on_channel_part(self, channel : IrcChannel):
+  def on_channel_part(self, channel : libtwitch.IrcChannel):
     """
     triggered when the bot leaves to a channel
     :param channel: the parted channel
     """
 
-  def on_chatter_join(self, chatter : IrcChatter):
+  def on_chatter_join(self, chatter : libtwitch.IrcChatter):
     """
     triggered when a chatter joins to a channel
     :param chatter: the chatter
     """
 
-  def on_chatter_part(self, chatter : IrcChatter):
+  def on_chatter_part(self, chatter : libtwitch.IrcChatter):
     """
     triggered when a chatter parts to a channel
     :param chatter: the chatter
     """
 
-  def on_moderate(self, message : BotMessage) -> ModerationAction:
+  def on_moderate(self, message : libtwitch.BotMessage) -> libtwitch.ModerationAction:
     """
     called when a privmsg is received in a channel
     note: this includes all messages sent to the chat
@@ -175,21 +135,21 @@ class Plugin:
     :return: the moderation action to take or None
     """
 
-  def on_privmsg(self, message : BotMessage):
+  def on_privmsg(self, message : libtwitch.BotMessage):
     """
     called when a privmsg is received in a channel
     note: this includes all messages sent to the chat
     :param message: the received message
     """
 
-  def on_message(self, message : BotMessage):
+  def on_message(self, message : libtwitch.BotMessage):
     """
     called when a message is received in a channel
     note: this does not include commands (see on_privmsg and on_command)
     :param message: the received message
     """
 
-  def on_command(self, message : BotMessage, cmd : str, args : dict[str, str]):
+  def on_command(self, message : libtwitch.BotMessage, cmd : str, args : dict[str, str]):
     """
     called when a command is recognized in a channel
     :param message: the received message
@@ -197,7 +157,7 @@ class Plugin:
     :param args: the parsed arguments of the command
     """
 
-  def on_roomstate(self, channel : IrcChannel, tags : dict[str, str]):
+  def on_roomstate(self, channel : libtwitch.IrcChannel, tags : dict[str, str]):
     """
     called when the state of a channel changes
     :param channel: the channel that changed

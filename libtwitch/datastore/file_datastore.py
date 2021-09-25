@@ -4,7 +4,7 @@ import os
 from typing import Any, Optional
 from redis import Redis
 
-from libtwitch.datastore import Datastore, DatastoreDomain, DatastoreDomainType, get_domain
+import libtwitch
 
 class FileDatastoreFile:
   def __init__(self, key : str, data : dict):
@@ -16,23 +16,22 @@ def _ensure_dir(file_path : str):
   dir_path = os.path.dirname(file_path)
   os.makedirs(dir_path, exist_ok=True)
 
-class FileDatastore(Datastore):
+class FileDatastore(libtwitch.Datastore):
   def __init__(self, path : str, redis = Optional[Redis]):
     self.path = path
     self._cache_global = None # TODO
     self._cache : dict[str, FileDatastoreFile] = {}
     self._redis : Optional[Redis] = redis
 
-  @staticmethod
-  def _get_filekey(subject : DatastoreDomainType) -> Optional[str]:
-    domain = get_domain(subject)
+  def _get_filekey(self, subject : libtwitch.DatastoreDomainType) -> Optional[str]:
+    domain = self._get_domain(subject)
     if domain is None:
       return None
-    if domain == DatastoreDomain.Chatter:
+    if domain == libtwitch.DatastoreDomain.Chatter:
       return "chatters.%s.%s" % (subject.channel.name, subject.id)
-    elif domain == DatastoreDomain.Channel:
+    elif domain == libtwitch.DatastoreDomain.Channel:
       return "channel.%s" % subject.name
-    elif domain == DatastoreDomain.Global:
+    elif domain == libtwitch.DatastoreDomain.Global:
       return "global"
     return None
 
@@ -81,7 +80,7 @@ class FileDatastore(Datastore):
   def _gen_file(filekey : str) -> FileDatastoreFile:
     return FileDatastoreFile(filekey, {})
 
-  def _get_file(self, subject : DatastoreDomainType) -> Optional[FileDatastoreFile]:
+  def _get_file(self, subject : libtwitch.DatastoreDomainType) -> Optional[FileDatastoreFile]:
     filekey = self._get_filekey(subject)
     if filekey is None:
       return None
@@ -110,7 +109,7 @@ class FileDatastore(Datastore):
     self._redis_set(file)
     return file
 
-  def get(self, subject : DatastoreDomainType, key : str, fallback = None) -> Any:
+  def get(self, subject : libtwitch.DatastoreDomainType, key : str, fallback = None) -> Any:
     file = self._get_file(subject)
     if file is None:
       return fallback
@@ -118,7 +117,7 @@ class FileDatastore(Datastore):
       return fallback
     return file.data[key]
 
-  def set(self, subject : DatastoreDomainType, key : str, value) -> None:
+  def set(self, subject : libtwitch.DatastoreDomainType, key : str, value) -> None:
     file = self._get_file(subject)
     if file is None:
       return
@@ -126,13 +125,13 @@ class FileDatastore(Datastore):
     file.dirty = True
     self._redis_set(file)
 
-  def has(self, subject : DatastoreDomainType, key : str) -> bool:
+  def has(self, subject : libtwitch.DatastoreDomainType, key : str) -> bool:
     file = self._get_file(subject)
     if file is None:
       return False
     return key in file.data
 
-  def rem(self, subject : DatastoreDomainType, key : str) -> None:
+  def rem(self, subject : libtwitch.DatastoreDomainType, key : str) -> None:
     file = self._get_file(subject)
     if file is None:
       return
@@ -142,7 +141,7 @@ class FileDatastore(Datastore):
     file.dirty = True
     self._redis_set(file)
 
-  def keys(self, subject : DatastoreDomainType) -> list[str]:
+  def keys(self, subject : libtwitch.DatastoreDomainType) -> list[str]:
     file = self._get_file(subject)
     if file is None:
       return []

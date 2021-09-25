@@ -1,25 +1,20 @@
 from __future__ import annotations
 
-from enum import IntEnum
 from functools import total_ordering
 
-class ModerationActionType(IntEnum):
-  Nothing = 0
-  RemoveMessage = 1
-  Timeout = 2
-  Ban = 3
+import libtwitch
 
 @total_ordering
 class ModerationAction:
-  def __init__(self, action : ModerationActionType, duration : int = 0, reason : str = None, response : str = None):
-    self.action : ModerationActionType = action
+  def __init__(self, action : libtwitch.ModerationActionType, duration : int = 0, reason : str = None, response : str = None):
+    self.action : libtwitch.ModerationActionType = action
     self.reason : str = reason
     self.response : str = response
     self.duration : int = duration
 
   def __eq__(self, other : ModerationAction) -> bool:
     if self.action == other.action:
-      if self.action == ModerationActionType.Timeout:
+      if self.action == libtwitch.ModerationActionType.Timeout:
         return self.duration == other.duration
       return True
     return False
@@ -31,7 +26,7 @@ class ModerationAction:
     if self.action < other.action:
       return True
 
-    if self.action == other.action and self.action == ModerationActionType.Timeout:
+    if self.action == other.action and self.action == libtwitch.ModerationActionType.Timeout:
       if self.duration < other.duration:
         return True
 
