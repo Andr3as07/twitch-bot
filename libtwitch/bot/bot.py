@@ -14,26 +14,26 @@ class Bot(libtwitch.IrcConnection):
     self.datastore = store
 
     self._extensions : dict[str, Any] = {}
-    self.plugins : dict[str, libtwitch.Plugin] = {}
+    self._plugins : dict[str, libtwitch.Plugin] = {}
 
   def register_plugin(self, plugin : libtwitch.Plugin):
     if not isinstance(plugin, libtwitch.Plugin):
       return False # plugins must derive from Plugin
 
     name = plugin.get_name()
-    self.plugins[name] = plugin
+    self._plugins[name] = plugin
     plugin.on_event(libtwitch.PluginEvent.SelfLoad)
 
-    for other_plugin_name in self.plugins: # Inform all other plugins
+    for other_plugin_name in self._plugins: # Inform all other plugins
       if other_plugin_name == name:
         continue
       self._on_event(libtwitch.PluginEvent.PluginLoad, name) # Inform the cog of it's own loading
 
   def get_plugin(self, name : str):
-    return self.plugins.get(name)
+    return self._plugins.get(name)
 
   def unregister_plugin(self, name : str):
-    plugin = self.plugins.pop(name, None)
+    plugin = self._plugins.pop(name, None)
     if plugin is None:
       return
 
@@ -41,8 +41,8 @@ class Bot(libtwitch.IrcConnection):
     self._on_event(libtwitch.PluginEvent.PluginUnload, name) # Inform all other plugins
 
   def _on_event(self, event : libtwitch.PluginEvent, *args, **kwargs):
-    for plugin_name in self.plugins:
-      self.plugins[plugin_name].on_event(event, *args, **kwargs)
+    for plugin_name in self._plugins:
+      self._plugins[plugin_name].on_event(event, *args, **kwargs)
 
   def load_extension(self, path : str):
     path = "extensions." + path
@@ -196,8 +196,8 @@ class Bot(libtwitch.IrcConnection):
       return
 
     harshest_action = None
-    for plugin_name in self.plugins:
-      action = self.plugins[plugin_name].on_event(libtwitch.PluginEvent.Moderate, msg)
+    for plugin_name in self._plugins:
+      action = self._plugins[plugin_name].on_event(libtwitch.PluginEvent.Moderate, msg)
       if action is None:
         continue
       if harshest_action is None or action > harshest_action:

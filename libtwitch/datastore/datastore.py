@@ -25,7 +25,7 @@ class Datastore:
     pass
 
   @staticmethod
-  def _get_domain(subject: DatastoreDomainType) -> libtwitch.DatastoreDomain:
+  def _get_domain(subject: DatastoreDomainType) -> Optional[libtwitch.DatastoreDomain]:
     if subject is None:
       return libtwitch.DatastoreDomain.Global
     elif isinstance(subject, libtwitch.IrcChannel):
