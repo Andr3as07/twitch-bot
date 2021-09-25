@@ -12,6 +12,7 @@ from libtwitch.irc.connection import IrcConnection, RATE_USER, RATE_MODERATOR
 
 from libtwitch.api.enums import BroadcasterType, UserType, RequestCacheBehaviour, RequestRatelimitBehaviour, RequestPriority
 from libtwitch.api.dataclasses import User, Follow
+from libtwitch.api.request_handler import RequestHandler
 from libtwitch.api.client import TwitchAPIClient
 
 from libtwitch.bot.enums import PluginEvent, ModerationActionType
