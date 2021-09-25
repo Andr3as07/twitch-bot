@@ -7,10 +7,11 @@ import libtwitch
 from libtwitch.datastore.datastore import Datastore
 
 class Bot(libtwitch.IrcConnection):
-  def __init__(self, nickname : str, token : str, store : Datastore):
+  def __init__(self, nickname : str, token : str, store : Datastore, prefix : str = '!'):
     super().__init__(nickname, token)
 
     self.datastore = store
+    self.prefix = prefix
 
     self._extensions : dict[str, Any] = {}
     self._plugins : dict[str, libtwitch.Plugin] = {}
@@ -168,18 +169,30 @@ class Bot(libtwitch.IrcConnection):
     self.datastore.sync()
 
   def _handle_command(self, msg : libtwitch.BotMessage):
-    if not msg.text.startswith('?'):
+    is_command = 0 # 0: Not a command, 1: Prefixed, 2: Mentioned
+    if msg.text.startswith(self.prefix):
+      is_command = 1
+    elif msg.text.lower().startswith("@%s " % self.nickname):
+      is_command = 2
+
+    if is_command == 0:
       return False
 
     args = msg.text.strip().split(' ')
     if len(args) == 0:
       return False
-    elif len(args[0]) == 1:
-      return False
 
-    # The command name is up to the first space.
-    # Anything after that is a space separated list of arguments
-    cmd = args[0][1:]
+    if is_command == 1:
+      if len(args[0]) == 1:
+        return False
+      # The command name is up to the first space.
+      # Anything after that is a space separated list of arguments
+      cmd = args[0][1:]
+    elif is_command == 2:
+      if len(args) < 2:
+        return False
+      cmd = args[1]
+      args.pop(0)
     args.pop(0)
 
     self.on_command(msg, cmd, args)

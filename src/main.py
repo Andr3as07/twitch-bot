@@ -14,7 +14,7 @@ from libtwitch import Datastore, FileDatastore
 
 class MyBot(libtwitch.Bot):
   def __init__(self, nickname : str, token : str, path : str, datastore : Datastore):
-    super().__init__(nickname, token, datastore)
+    super().__init__(nickname, token, datastore, '?')
 
     self.logger : logging.Logger = logging.getLogger('bot')
     c_handler = logging.StreamHandler()
