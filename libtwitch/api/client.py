@@ -58,7 +58,7 @@ class TwitchAPIClient(libtwitch.RequestHandler):
       if isinstance(user, int):
         url += "id=%s" % user
       elif isinstance(user, IrcChatter):
-        url += "login=%s" % user.name
+        url += "login=%s" % user.login
       elif isinstance(user, str):
         url += "login=%s" % user
       else:
@@ -76,7 +76,7 @@ class TwitchAPIClient(libtwitch.RequestHandler):
           if isinstance(key, int) and key == user.id:
             response_dict[key] = user
             break
-          elif isinstance(key, IrcChatter) and key.name == user.login:
+          elif isinstance(key, IrcChatter) and key.login == user.login:
             response_dict[key] = user
             break
           elif isinstance(key, str) and key.lower() == user.login:

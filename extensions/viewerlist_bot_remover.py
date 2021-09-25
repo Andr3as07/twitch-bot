@@ -35,20 +35,20 @@ class ViewerlistBotRemover(Plugin):
 
   def _ban(self, chatter : IrcChatter):
     # Don't ban yourself
-    if chatter.name == self.bot.nickname:
+    if chatter.login == self.bot.nickname:
       return
 
     # Don't ban an ignored user
-    if chatter.name in self.ignored:
+    if chatter.login in self.ignored:
       return
 
     # Ban only known bots
-    if not chatter.name in self.bots:
+    if not chatter.login in self.bots:
       return
 
     # Ban
     chatter.ban("Viewerlist bot")
-    print("Banned %s!" % chatter.name)
+    print("Banned %s!" % chatter.login)
 
   def on_chatter_join(self, join_event : ChatEvent):
     self._ban(join_event.chatter)

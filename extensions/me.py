@@ -1,7 +1,7 @@
 import io
 import json
 import os
-import re
+from typing import Optional
 
 from libtwitch import Bot, BotMessage, ModerationAction, Plugin
 from src import modutil
@@ -37,10 +37,10 @@ class ModMe(Plugin):
         self.config = jdata
 
   @staticmethod
-  def _on_moderate_impl(message : BotMessage) -> ModerationAction:
+  def _on_moderate_impl(message : BotMessage) -> bool:
     return message.text.startswith('ACTION ') and message.text.endswith('')
 
-  def on_moderate(self, message : BotMessage) -> ModerationAction:
+  def on_moderate(self, message : BotMessage) -> Optional[ModerationAction]:
     if not self._on_moderate_impl(message):
       return None
 

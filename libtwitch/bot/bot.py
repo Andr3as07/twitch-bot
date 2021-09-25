@@ -4,7 +4,6 @@ import sys
 from typing import Any
 
 import libtwitch
-from libtwitch import IrcChannel
 from libtwitch.datastore.datastore import Datastore
 
 class Bot(libtwitch.IrcConnection):
@@ -208,14 +207,14 @@ class Bot(libtwitch.IrcConnection):
   def on_message(self, msg : libtwitch.BotMessage):
     self._on_event(libtwitch.PluginEvent.Message, msg)
 
-  def on_roomstate(self, channel : IrcChannel, tags : dict[str, str]):
+  def on_roomstate(self, channel : libtwitch.IrcChannel, tags : dict[str, str]):
     self._on_event(libtwitch.PluginEvent.RoomstateChange, channel, tags)
 
   def on_privmsg(self, raw_msg : libtwitch.IrcMessage):
     msg = libtwitch.BotMessage.from_raw_message(raw_msg)
 
     # Ignore self (echo)
-    if msg.author.name.strip().lower() == self.nickname:
+    if msg.author.login.strip().lower() == self.nickname:
       return
 
     self._moderate(msg)

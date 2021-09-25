@@ -1,6 +1,7 @@
 import io
 import json
 import os
+from typing import Optional
 
 from libtwitch import Bot, BotMessage, ModerationAction, Plugin
 from src import modutil
@@ -38,7 +39,7 @@ class ModCaps(Plugin):
       if jdata is not None:
         self.config = jdata
 
-  def _on_moderate_impl(self, message : BotMessage) -> ModerationAction:
+  def _on_moderate_impl(self, message : BotMessage) -> bool:
     num_caps = 0
     length = len(message.text)
     for char in message.text:
@@ -56,7 +57,7 @@ class ModCaps(Plugin):
 
     return False
 
-  def on_moderate(self, message : BotMessage) -> ModerationAction:
+  def on_moderate(self, message : BotMessage) -> Optional[ModerationAction]:
     if not self._on_moderate_impl(message):
       return None
 

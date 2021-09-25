@@ -8,24 +8,67 @@ import libtwitch.irc.connection
 class IrcChannel:
   def __init__(self, connection : libtwitch.IrcConnection, name : str):
     self._connection = connection
-    self.name = name
-    self.emote_only = False
-    self.follower_only : int = -1
-    self.subs_only = False
-    self.slow = 0
-    self.r9k = 0
+    self._id : Optional[int] = 0
+    self._name = name
+    self._emote_only = False
+    self._follower_only : int = -1
+    self._subs_only = False
+    self._slow = 0
+    self._r9k : bool = False
     self._chatters = {}
-    self.tags = {}
+    self._tags : dict[str, str] = {}
+
+  @property
+  def is_emote_only(self) -> bool:
+    return self._emote_only
+
+  @property
+  def is_subs_only(self) -> bool:
+    return self._subs_only
+
+  @property
+  def is_followers_only(self) -> bool:
+    return self._follower_only >= 0
+
+  @property
+  def get_folowers_only_minutes(self) -> int:
+    return self._follower_only
+
+  @property
+  def is_slow_mode(self) -> bool:
+    return self._slow > 0
+
+  @property
+  def get_slow_mode_seconds(self) -> int:
+    return self._slow
+
+  @property
+  def is_in_r9k_mode(self) -> bool:
+    return self._r9k
+
+  @property
+  def name(self) -> str:
+    return self._name
+
+  @property
+  def id(self) -> Optional[int]:
+    if self._id is None or self._id < 0:
+      return None
+    return self._id
+
+  @property
+  def tags(self) -> dict[str, str]:
+    return self._tags
 
   def part(self) -> None:
     self._connection.part_channel(self)
 
   def chat(self, text : str) -> None:
-    self._connection.chat(self.name, text)
+    self._connection.chat(self._name, text)
 
   def ban(self, user : Union[libtwitch.IrcChatter, str], reason : str = None) -> None:
     if isinstance(user, libtwitch.IrcChatter):
-      user = user.name
+      user = user.login
 
     if reason is None:
       self.chat(".ban %s" % user)
@@ -34,7 +77,7 @@ class IrcChannel:
 
   def timeout(self, user : Union[libtwitch.IrcChatter, str], duration : int, reason : str = None):
     if isinstance(user, libtwitch.IrcChatter):
-      user = user.name
+      user = user.login
 
     if duration < 0:
       return False
@@ -58,12 +101,12 @@ class IrcChannel:
       chatter = libtwitch.IrcChatter(self, author_name)
       self._chatters[author_name] = chatter
 
-    libtwitch.irc.connection._update_chatter_tags(chatter, tags) # TODO: FIXME
+    _update_chatter_tags(chatter, tags) # TODO: FIXME
 
     msg = libtwitch.IrcMessage(self, chatter, text, tags)
 
     if "id" in tags:
-      msg.id = tags["id"]
+      msg._id = tags["id"]
 
     self._connection.on_privmsg(msg)
 
@@ -81,25 +124,33 @@ class IrcChannel:
       self._chatters[name] = chatter
     self._connection.on_part(libtwitch.ChatEvent(self, chatter))
 
+  def __eq__(self, other):
+    return self._name == other.login
+
+  def __hash__(self):
+    return hash(self._name)
+
   def __str__(self):
-    return self.name
+    return "#%s" % self._name
 
   def __repr__(self):
-    return str(self)
+    return "<Channel name: %s>" % self._name
 
   def handle_roomstate(self, tags : dict[str, str]):
     if "emote-only" in tags:
-      self.emote_only = tags["emote-only"] == "1"
+      self._emote_only = tags["emote-only"] == "1"
     if "followers-only" in tags:
-      self.follower_only = int(tags["followers-only"])
+      self._follower_only = int(tags["followers-only"])
     if "r9k" in tags:
-      self.r9k = tags["r9k"] == "1"
+      self._r9k = tags["r9k"] == "1"
     if "slow" in tags:
-      self.slow = int(tags["slow"])
+      self._slow = int(tags["slow"])
     if "subs-only" in tags:
-      self.subs_only = tags["subs-only"] == "1"
+      self._subs_only = tags["subs-only"] == "1"
+    if "room-id" in tags:
+      self._id = int(tags["room-id"])
     self._connection.on_roomstate(self, tags)
-    self.tags = tags
+    self._tags = tags
 
   def _hande_sub(self, text, tags): # sub and resub
     total_months = int(tags['msg-param-cumulative-months'])
@@ -181,3 +232,26 @@ class IrcChannel:
       self._handle_bitsbadgetier(text, tags)
     else:
       print("Unknown usernotice type %s" % msg_type)
+
+def _update_chatter_type_enum(chatter : libtwitch.IrcChatter, chatter_type : libtwitch.ChatterType, value : bool) -> None:
+  if value:
+    chatter._type |= chatter_type
+  else:
+    chatter._type &= ~chatter_type
+
+def _update_chatter_tags(chatter : libtwitch.IrcChatter, tags : dict[str, str]) -> None:
+  if "display-name" in tags:
+    chatter._display = tags["display-name"]
+  if "user-id" in tags:
+    chatter._id = int(tags["user-id"])
+  if "mod" in tags:
+    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Moderator, tags["mod"] == "1")
+  if "badges" in tags:
+    badges = tags["badges"]
+    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Twitch, "admin" in badges or "global_mod" in badges or "staff" in badges)
+    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Broadcaster, "broadcaster" in badges)
+    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Subscriber, "subscriber" in badges)
+    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Turbo, "turbo" in badges)
+
+    if not "mod" in tags:
+      _update_chatter_type_enum(chatter, libtwitch.ChatterType.Moderator, "moderator" in badges)

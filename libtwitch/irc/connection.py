@@ -23,7 +23,7 @@ RE_PART = r"^:([^\s!]+)!(?:[^\s@]+)@(?:[^\s\.]+)(?:\.tmi\.twitch\.tv PART) #([^\
 
 class IrcConnection:
   def __init__(self, nickname, token):
-    self.nickname = nickname.lower()
+    self._nickname = nickname.lower()
     self._token : str = token
     self._socket : Optional[socket] = None
     self._channels : dict[str, libtwitch.IrcChannel] = {}
@@ -40,13 +40,17 @@ class IrcConnection:
 
     self.on_ready()
 
+  @property
+  def nickname(self) -> str:
+    return self._nickname
+
   def connect(self):
     global HOST
     global PORT
     self._socket = socket.socket()
     self._socket.connect((HOST, PORT))
     self.send("PASS %s" % self._token)
-    self.send("NICK %s" % self.nickname)
+    self.send("NICK %s" % self._nickname)
     self.send("CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands")
 
     self.on_connect()
@@ -62,7 +66,7 @@ class IrcConnection:
     return self._channels[name]
 
   def part_channel(self, channel : Union[str, libtwitch.IrcChannel]) -> bool:
-    if not channel.name in self._channels:
+    if not channel._name in self._channels:
       return False
     self.on_channel_part(channel)
     self._channels.pop(channel.name)
@@ -255,26 +259,3 @@ class IrcConnection:
 
   def on_roomstate(self, channel : libtwitch.IrcChannel, tags : dict[str, str]):
     pass
-
-def _update_chatter_type_enum(chatter : libtwitch.IrcChatter, chatter_type : libtwitch.ChatterType, value : bool) -> None:
-  if value:
-    chatter.type |= chatter_type
-  else:
-    chatter.type &= ~chatter_type
-
-def _update_chatter_tags(chatter : libtwitch.IrcChatter, tags : dict[str, str]) -> None:
-  if "display-name" in tags:
-    chatter._display = tags["display-name"]
-  if "user-id" in tags:
-    chatter.id = int(tags["user-id"])
-  if "mod" in tags:
-    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Moderator, tags["mod"] == "1")
-  if "badges" in tags:
-    badges = tags["badges"]
-    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Twitch, "admin" in badges or "global_mod" in badges or "staff" in badges)
-    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Broadcaster, "broadcaster" in badges)
-    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Subscriber, "subscriber" in badges)
-    _update_chatter_type_enum(chatter, libtwitch.ChatterType.Turbo, "turbo" in badges)
-
-    if not "mod" in tags:
-      _update_chatter_type_enum(chatter, libtwitch.ChatterType.Moderator, "moderator" in badges)

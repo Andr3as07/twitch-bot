@@ -94,13 +94,13 @@ class MyBot(libtwitch.Bot):
 
   def on_message(self, msg : libtwitch.BotMessage):
     # Ignore self (echo)
-    if msg.author.name.strip().lower() == self.nickname:
+    if msg.author.login.strip().lower() == self.nickname:
       self.logger.debug('Ignoring self (echo)')
       return
 
     # Ignored user list
-    if msg.author.name.strip().lower() in self.ignored_users:
-      self.logger.debug('Ignoring user "%s"' % msg.author.name)
+    if msg.author.login.strip().lower() in self.ignored_users:
+      self.logger.debug('Ignoring user "%s"' % msg.author.login)
       return
 
     # Continue command processing

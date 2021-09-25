@@ -75,7 +75,7 @@ def get_tiered_moderation_action(chatter : IrcChatter, actions : dict, count : i
   if len(best["messages"]) > 0:
     text = random.choice(best["messages"])
     data = {
-      "user.name": chatter.name,
+      "user.name": chatter.login,
       "count": count,
       "duration": moderation_action.duration
     }

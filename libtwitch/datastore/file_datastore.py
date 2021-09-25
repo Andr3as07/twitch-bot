@@ -30,7 +30,7 @@ class FileDatastore(libtwitch.Datastore):
     if domain == libtwitch.DatastoreDomain.Chatter:
       return "chatters.%s.%s" % (subject.channel.name, subject.id)
     elif domain == libtwitch.DatastoreDomain.Channel:
-      return "channel.%s" % subject.name
+      return "channel.%s" % subject.login
     elif domain == libtwitch.DatastoreDomain.Global:
       return "global"
     return None
