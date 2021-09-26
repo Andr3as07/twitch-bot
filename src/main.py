@@ -140,6 +140,7 @@ if __name__ == '__main__':
     datastore)
   # Commands
   bot.load_extension("8ball")
+  bot.load_extension("quotes")
 
   # Moderation
   bot.load_extension("viewerlist_bot_remover")

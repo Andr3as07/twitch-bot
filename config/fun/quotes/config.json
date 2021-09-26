@@ -1,0 +1,8 @@
+{
+  "format": "Quote #{quote.index}: {quote.text} [{quote.game}] [{quote.time}]",
+  "not_found": "@{user.name}, quote not found.",
+  "none_found": "@{user.name}, this channel has no quotes.",
+  "out_of_range": "@{user.name}, quote must be in range 1 to {quote.count}.",
+  "no_content": "@{user.name}, can not create a quote with no content.",
+  "deleted": "@{user.name}, deleted quote #{quote.index}."
+}
