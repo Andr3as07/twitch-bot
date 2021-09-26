@@ -187,11 +187,11 @@ class Bot(libtwitch.IrcConnection):
         return False
       # The command name is up to the first space.
       # Anything after that is a space separated list of arguments
-      cmd = args[0][1:]
+      cmd = args[0][1:].lower()
     elif is_command == 2:
       if len(args) < 2:
         return False
-      cmd = args[1]
+      cmd = args[1].lower()
       args.pop(0)
     args.pop(0)
 
