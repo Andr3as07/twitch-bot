@@ -1,9 +1,13 @@
+import io
 import json
+import os
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Union
+from typing import Optional, Union
 
-from libtwitch import Bot, BotMessage, IrcChannel, Plugin
+from libtwitch import Bot, BotMessage, IrcChannel, ModerationAction, Plugin
+from src import modutil
+
 class EmoteSource(Enum):
   Twitch = auto()
   BttvGlobal = auto()
@@ -132,8 +136,78 @@ class UtilEmote(Plugin):
 
     return emotes
 
+class ModEmote(Plugin):
+  name = "mod.emote"
+  def __init__(self, bot):
+    super().__init__(bot)
+    self.config = None
+
+  def on_load(self):
+    config_path = self.get_config_dir() + "/config.json"
+    if not os.path.exists(config_path):
+      self.config = {
+        "min": 5,
+        "max": 20,
+        "percent": 0.60,
+        "actions": [
+          {
+            "count": 1,
+            "messages": [
+              "@{user.name} -> Please refrain from spamming emotes."
+            ],
+            "mod_action": {
+              "type": "timeout",
+              "reason": "Spamming Emotes",
+              "constant": 10
+            }
+          }
+        ]
+      }
+    else:
+      with io.open(config_path) as f:
+        jdata = json.load(f)
+      if jdata is not None:
+        self.config = jdata
+
+  def _on_moderate_impl(self, message : BotMessage) -> bool:
+    util_plugin : Optional[UtilEmote] = self.bot.get_plugin("util.emote")
+    if util_plugin is None:
+      return False
+
+    length = len(message.text)
+    emotes = util_plugin.get_emotes(message)
+
+    num_emotes = len(emotes)
+    char_count = 0
+
+    if num_emotes < self.config['min']:
+      return False
+
+    if num_emotes > self.config['max']:
+      return True
+
+    for emote in emotes:
+      char_count += emote.end - emote.start
+
+    if char_count / length > self.config["percent"]:
+      return True
+
+    return False
+
+  def on_moderate(self, message : BotMessage) -> Optional[ModerationAction]:
+    if not self._on_moderate_impl(message):
+      return None
+
+    meta = modutil.get_moderation_meta(self.bot, message.author, 'emotes')
+    meta.invoke()
+    meta.save(self.bot)
+    action = modutil.get_tiered_moderation_action(message.author, self.config['actions'], meta.count)
+    return action
+
 def setup(bot : Bot):
   bot.register_plugin(UtilEmote(bot))
+  bot.register_plugin(ModEmote(bot))
 
 def teardown(bot : Bot):
   bot.unregister_plugin(UtilEmote.name)
+  bot.unregister_plugin(ModEmote.name)
