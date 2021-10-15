@@ -25,11 +25,17 @@ class RequestHandler:
       self._queue.put((priority, url, callback))
 
   @staticmethod
+  def get_request_web_sync(url: str) -> str:
+    print("get_request_web_sync: url=%s" % url)
+    response = requests.get(url)
+    return response.text
+
+  @staticmethod
   def _get_request_web(url : str, callback : callable = None) -> None:
     response = requests.get(url)
     callback(response.text)
 
-  def _get_request_redis(self, url : str) -> Optional[dict]:
+  def get_request_redis_sync(self, url : str) -> Optional[dict]:
     if self._redis is None:
       return None
 
@@ -39,11 +45,11 @@ class RequestHandler:
 
     return raw_str
 
-  def _get_request_redis_set(self, url : str, response : Response) -> None:
+  def get_request_redis_set_sync(self, url : str, text : str) -> None:
     if self._redis is None:
       return None
 
-    self._redis.setex("GET %s" % url, self._cache_duration, response.text)
+    self._redis.setex("GET %s" % url, self._cache_duration, text)
 
   @staticmethod
   def _calc_queue_priority(priority : libtwitch.RequestPriority,
@@ -51,19 +57,30 @@ class RequestHandler:
                            cache_behaviour : libtwitch.RequestCacheBehaviour) -> int:
     return int(priority) + int(ratelimit_behaviour) + int(cache_behaviour)
 
+  def get_request_sync(self, url: str, cache_behaviour : libtwitch.RequestCacheBehaviour = libtwitch.RequestCacheBehaviour.CacheFirst) -> (bool, str):
+    # TODO: Respect Cache behaviour
+    text = self.get_request_redis_sync(url)
+    if text is not None:
+      return True, text
+
+    text = self.get_request_web_sync(url)
+    if text is not None:
+      self.get_request_redis_set_sync(url, text)
+
+    return False, text
 
   def _get_request(self, url : str, callback : callable = None,
                    priority : libtwitch.RequestPriority = libtwitch.RequestPriority.Low,
                    ratelimit_behaviour : libtwitch.RequestRatelimitBehaviour = libtwitch.RequestRatelimitBehaviour.Mandatory,
                    cache_behaviour : libtwitch.RequestCacheBehaviour = libtwitch.RequestCacheBehaviour.CacheFirst):
     # TODO: Respect Cache behaviour
-    text = self._get_request_redis(url)
+    text = self.get_request_redis_sync(url)
     if text is not None:
       return callback(True, text)
 
     def on_web_callback(response_text):
       # TODO: Handle errors
-      self._get_request_redis_set(url, response_text)
+      self.get_request_redis_set_sync(url, response_text)
 
       return callback(False, response_text)
 

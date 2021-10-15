@@ -10,10 +10,10 @@ import json
 import os
 import io
 
-from libtwitch import Datastore, FileDatastore
+from libtwitch import Datastore, FileDatastore, RequestHandler
 
 class MyBot(libtwitch.Bot):
-  def __init__(self, nickname : str, token : str, path : str, datastore : Datastore):
+  def __init__(self, nickname : str, token : str, path : str, datastore : Datastore, request_handler: RequestHandler):
     super().__init__(nickname, token, datastore, '?')
 
     self.logger : logging.Logger = logging.getLogger('bot')
@@ -27,6 +27,8 @@ class MyBot(libtwitch.Bot):
     self.logger.debug('Initialized with nick %s.' % nickname)
 
     self.user_data : dict = {} # TODO: FIX: This should be separated into the different channels
+
+    self.request_handler = request_handler
 
     # Ignored users
     self.ignored_users : list[str] = []
@@ -127,11 +129,15 @@ if __name__ == '__main__':
     r = Redis(host=os.getenv('REDIS_HOST'), port=int(os.getenv('REDIS_PORT')))
 
   datastore = FileDatastore("./data", r)
+
+  request_handler = RequestHandler(redis=r)
+
   bot = MyBot(
     os.getenv('NICKNAME'),
     os.getenv('CHAT_TOKEN'),
     "./config",
-    datastore)
+    datastore,
+    request_handler)
   # Commands
   bot.load_extension("8ball")
   bot.load_extension("quotes")
@@ -143,7 +149,9 @@ if __name__ == '__main__':
   bot.load_extension("links")
   bot.load_extension("symbols")
   bot.load_extension("me")
+
   # Util
+  bot.load_extension("emote")
   bot.load_extension("console")
 
   bot.connect()
