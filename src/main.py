@@ -115,12 +115,6 @@ class MyBot(libtwitch.Bot):
   def on_connect(self):
     self.logger.debug("(Re)connected to twitch chat servers.")
 
-  def on_channel_join(self, channel : libtwitch.IrcChannel):
-    self.logger.info("Joined channel %s" % channel.name)
-
-  def on_channel_part(self, channel : libtwitch.IrcChannel):
-    self.logger.info("Parted from channel %s" % channel.name)
-
   def on_error(self, error : str):
     self.logger.error(error)
     pass
@@ -148,6 +142,8 @@ if __name__ == '__main__':
   bot.load_extension("length")
   bot.load_extension("links")
   bot.load_extension("me")
+  # Util
+  bot.load_extension("console")
 
   bot.connect()
   channel = bot.join_channel(os.getenv('CHANNEL'))
