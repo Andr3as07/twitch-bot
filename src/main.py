@@ -141,6 +141,7 @@ if __name__ == '__main__':
   bot.load_extension("caps")
   bot.load_extension("length")
   bot.load_extension("links")
+  bot.load_extension("symbols")
   bot.load_extension("me")
   # Util
   bot.load_extension("console")
