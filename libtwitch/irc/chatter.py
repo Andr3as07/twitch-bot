@@ -14,7 +14,7 @@ class IrcChatter:
     self._type : ChatterType = ChatterType.Unknown
 
   def has_type(self, other : ChatterType) -> bool:
-    return (int(self._type) & ~other) != 0
+    return (int(self._type) & other) != 0
 
   @property
   def id(self) -> Optional[int]:
