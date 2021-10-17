@@ -245,6 +245,15 @@ class Bot(libtwitch.IrcConnection):
       msg.channel.chat(resp)
     self.datastore.sync()
 
+  def on_subgift(self, event : libtwitch.SubGiftEvent):
+    self._on_event(libtwitch.PluginEvent.SubGift, event)
+
+  def on_raid(self, event : libtwitch.RaidEvent):
+    self._on_event(libtwitch.PluginEvent.Raid, event)
+
+  def on_ritual(self, event : libtwitch.RitualEvent):
+    self._on_event(libtwitch.PluginEvent.Ritual, event)
+
   @staticmethod
   def get_config_dir():
     return "./config"

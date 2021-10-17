@@ -4,6 +4,9 @@ from typing import Optional, Union
 
 import libtwitch
 import libtwitch.irc.connection
+from libtwitch.irc.enums import SubEventType, SubGiftEventType, str2ritual, str2subtier
+from libtwitch.irc.events import ChatEvent, RaidEvent, RitualEvent, SubEvent, SubGiftEvent
+from libtwitch.irc.message import MessageEvent
 
 class IrcChannel:
   def __init__(self, connection : libtwitch.IrcConnection, name : str):
@@ -95,7 +98,7 @@ class IrcChannel:
       return self._chatters[user_name]
     return None
 
-  def handle_privmsg(self, author_name : str, text : str, tags : dict[str, str]):
+  def handle_privmsg(self, author_name : str, text : str, tags : dict[str, str], event: Optional[MessageEvent] = None):
     chatter = self.get_chatter(author_name)
     if chatter is None:
       chatter = libtwitch.IrcChatter(self, author_name)
@@ -105,8 +108,11 @@ class IrcChannel:
 
     msg = libtwitch.IrcMessage(self, chatter, text, tags)
 
-    if "id" in tags:
-      msg._id = tags["id"]
+    if "id" in msg.tags:
+      msg._id = msg.tags["id"]
+
+    if event is not None:
+      msg._event = event
 
     self._connection.on_privmsg(msg)
 
@@ -115,14 +121,22 @@ class IrcChannel:
     if chatter is None:
       chatter = libtwitch.IrcChatter(self, name)
       self._chatters[name] = chatter
-    self._connection.on_join(libtwitch.ChatEvent(self, chatter))
+    ev = ChatEvent()
+    ev.channel = self
+    ev.chatter = chatter
+
+    self._connection.on_join(ev)
 
   def handle_part(self, name : str):
     chatter = self.get_chatter(name)
     if chatter is None:
       chatter = libtwitch.IrcChatter(self, name)
       self._chatters[name] = chatter
-    self._connection.on_part(libtwitch.ChatEvent(self, chatter))
+    ev = ChatEvent()
+    ev.channel = self
+    ev.chatter = chatter
+
+    self._connection.on_part(ev)
 
   def __eq__(self, other):
     return self._name == other.login
@@ -152,40 +166,58 @@ class IrcChannel:
     self._connection.on_roomstate(self, tags)
     self._tags = tags
 
-  def _hande_sub(self, text, tags): # sub and resub
-    total_months = int(tags['msg-param-cumulative-months'])
-    streak_share = bool(tags['msg-param-should-share-streak'])
-    streak_months = int(tags['msg-param-streak-months'])
-    tier_str = tags['msg-param-sub-plan']
-    tier_name = tags['msg-param-sub-plan-name']
-    # TODO: event
-    pass
+  def _hande_sub(self, text, tags, typ : SubEventType): # sub and resub
+    ev = SubEvent(typ)
+    ev.total_months = int(tags['msg-param-cumulative-months'])
+    ev.streak_share = bool(tags['msg-param-should-share-streak'])
+    ev.streak_months = int(tags['msg-param-streak-months'])
+    ev.tier = str2subtier(tags['msg-param-sub-plan'])
+    ev.tier_name = tags['msg-param-sub-plan-name']
 
-  def _handle_subgift(self, text, tags): # subgift and anon-subgift
-    total_months = int(tags['msg-param-months'])
-    recipient_display = tags['msg-param-recipient-display-name']
-    recipient_id = tags['msg-param-recipient-id']
-    recipient_login = tags['msg-param-recipient-name']
-    tier_str = tags['msg-param-sub-plan']
-    tier_name = tags['msg-param-sub-plan-name']
-    #gift_months = int(tags['msg-param-gift-months'])
-    # TODO: event
-    pass
+    author_name = tags['login']
+
+    self.handle_privmsg(author_name, text, tags, ev)
+
+  def _handle_subgift(self, tags, typ : SubGiftEventType): # subgift and anon-subgift
+    ev = SubGiftEvent(typ)
+    ev.total_months = int(tags['msg-param-months'])
+    ev.recipient_display = tags['msg-param-recipient-display-name']
+    ev.recipient_id = tags['msg-param-recipient-id']
+    if 'msg-param-recipient-name' in tags:
+      ev.recipient_login = tags['msg-param-recipient-name']
+    elif 'msg-param-recipient-user-name' in tags:
+      ev.recipient_login = tags['msg-param-recipient-user-name']
+    ev.tier_str = str2subtier(tags['msg-param-sub-plan'])
+    ev.tier_name = tags['msg-param-sub-plan-name']
+    if 'msg-param-gift-months' in tags:
+      ev.gift_months = int(tags['msg-param-gift-months'])
+
+    ev.tags = tags
+    ev.channel = self
+
+    self._connection.on_subgift(ev)
 
   def _handle_submysterygift(self, text, tags):
+    assert False, "unimplemented"
     pass
 
   def _handle_rewardgift(self, text, tags):
+    assert False, "unimplemented"
     pass
 
-  def _handle_raid(self, text, tags):
-    display = tags['msg-param-displayName']
-    login = tags['msg-param-login']
-    viewers = int(tags['msg-param-viewerCount'])
-    # TODO: event
-    pass
+  def _handle_raid(self, tags):
+    ev = RaidEvent()
+    ev.display = tags['msg-param-displayName']
+    ev.login = tags['msg-param-login']
+    ev.viewers = int(tags['msg-param-viewerCount'])
 
-  def _handle_unraid(self, text, tags):
+    ev.tags = tags
+    ev.channel = self
+
+    self._connection.on_raid(ev)
+
+  def _handle_unraid(self, tags):
+    assert False, "unimplemented"
     pass
 
   def _handle_giftpaidupgrade(self, text, tags): # giftpaidupgrade and anon-giftpaidupgrade
@@ -195,16 +227,21 @@ class IrcChannel:
     display = tags['msg-param-sender-name']
     # TODO: Parse
     # TODO: event
+    assert False, "unimplemented"
     pass
 
   def _handle_ritual(self, text, tags): # ritual
-    ritual_name = tags['msg-param-ritual-name']
-    # TODO: event
-    pass
+    ev = RitualEvent()
+    ev.tags = tags
+    ev.channel = self
+    ev.typ = str2ritual(tags['msg-param-ritual-name'])
+
+    self._connection.on_ritual(ev)
 
   def _handle_bitsbadgetier(self, text, tags):
     threshold = tags['msg-param-threshold']
     # TODO: event
+    assert False, "unimplemented"
     pass
 
   def handle_usernotice(self, text, tags):
@@ -212,10 +249,14 @@ class IrcChannel:
       return
 
     msg_type = tags["msg-id"]
-    if msg_type == "sub" or msg_type == "resub":
-      self._hande_sub(text, tags)
-    elif msg_type == "subgift" or msg_type == "anonsubgift":
-      self._handle_subgift(text, tags)
+    if msg_type == "sub" :
+      self._hande_sub(text, tags, SubEventType.Sub)
+    elif msg_type == "resub":
+      self._hande_sub(text, tags, SubEventType.Resub)
+    elif msg_type == "subgift":
+      self._handle_subgift(tags, SubGiftEventType.SubGift)
+    elif msg_type == "anonsubgift":
+      self._handle_subgift(tags, SubGiftEventType.AnonSubGift)
     elif msg_type == "submysterygift":
       self._handle_submysterygift(text, tags)
     elif msg_type == "giftpaidupgrade" or msg_type == "anongiftpaidupgrade":
@@ -223,9 +264,9 @@ class IrcChannel:
     elif msg_type == "rewardgift":
       self._handle_rewardgift(text, tags)
     elif msg_type == "raid":
-      self._handle_raid(text, tags)
+      self._handle_raid(tags)
     elif msg_type == "unraid":
-      self._handle_unraid(text, tags)
+      self._handle_unraid(tags)
     elif msg_type == "ritual":
       self._handle_ritual(text, tags)
     elif msg_type == "bitsbadgetier":

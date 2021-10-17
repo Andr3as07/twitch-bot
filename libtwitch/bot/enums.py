@@ -29,7 +29,6 @@ class PluginEvent(Enum):
   Command = auto()
   Whisper = auto() # TODO
   RoomstateChange = auto()
-  Subscription = auto() # TODO
   SubGift = auto() # TODO
   Raid = auto() # TODO
   Unraid = auto() # TODO

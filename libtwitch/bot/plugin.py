@@ -54,6 +54,12 @@ class Plugin:
       self.on_command(args[0], args[1], args[2])
     elif plugin_event == PluginEvent.RoomstateChange:
       self.on_roomstate(args[0], args[1])
+    elif plugin_event == PluginEvent.SubGift:
+      self.on_subgift(args[0])
+    elif plugin_event == PluginEvent.Raid:
+      self.on_raid(args[0])
+    elif plugin_event == PluginEvent.Ritual:
+      self.on_ritual(args[0])
 
     # Plugin events
     elif plugin_event == PluginEvent.SelfLoad:
@@ -162,6 +168,24 @@ class Plugin:
     called when the state of a channel changes
     :param channel: the channel that changed
     :param tags: the new set of tags that are applied
+    """
+
+  def on_subgift(self, event : libtwitch.SubGiftEvent):
+    """
+    called on subgift or anon-subgift
+    :param event: the event data
+    """
+
+  def on_raid(self, event : libtwitch.RaidEvent):
+    """
+    called when a channel gets raided
+    :param event: the event data
+    """
+
+  def on_ritual(self, event : libtwitch.RitualEvent):
+    """
+    called when a ritual gets triggered
+    :param event: the event data
     """
 
   # Plugin events

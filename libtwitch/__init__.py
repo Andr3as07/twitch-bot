@@ -3,11 +3,11 @@ __author__ = 'Andr3as07'
 
 __version__ = '1.0.0'
 
-from libtwitch.irc.enums import ChatterType, SubscriptionTier
+from libtwitch.irc.enums import ChatterType, SubscriptionTier, SubGiftEventType, SubEventType, RitualType, str2ritual, str2subtier
 from libtwitch.irc.channel import IrcChannel
 from libtwitch.irc.chatter import IrcChatter
 from libtwitch.irc.message import IrcMessage
-from libtwitch.irc.events import ChatEvent, RaidEvent, SubEvent, SubGiftEvent
+from libtwitch.irc.events import ChatEvent, RaidEvent, SubEvent, SubGiftEvent, MessageEvent, RitualType, SubEventType, SubGiftEventType, ChannelEvent, RitualEvent
 from libtwitch.irc.connection import IrcConnection, RATE_USER, RATE_MODERATOR
 
 from libtwitch.api.enums import BroadcasterType, UserType, RequestCacheBehaviour, RequestRatelimitBehaviour, RequestPriority

@@ -5,6 +5,7 @@ import datetime
 from typing import Optional
 
 import libtwitch
+from libtwitch.irc.events import MessageEvent, RaidEvent, SubEvent, SubGiftEvent
 
 class IrcMessage:
   def __init__(self, channel : libtwitch.IrcChannel, author : libtwitch.IrcChatter, text : str, tags : dict[str, str]):
@@ -14,6 +15,23 @@ class IrcMessage:
     self._text : str = text
     self._tags : dict[str, str] = tags
     self._id : Optional[int] = -1
+    self._event : Optional[MessageEvent] = None
+
+  @property
+  def is_sub(self) -> bool:
+    return self._event is not None and isinstance(self._event, SubEvent)
+
+  @property
+  def is_raid(self) -> bool:
+    return self._event is not None and isinstance(self._event, RaidEvent)
+
+  @property
+  def is_subgift(self) -> bool:
+    return self._event is not None and isinstance(self._event, SubGiftEvent)
+
+  @property
+  def event(self) -> Optional[MessageEvent]:
+    return self._event
 
   @property
   def id(self) -> Optional[int]:

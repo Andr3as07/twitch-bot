@@ -27,7 +27,7 @@ class IrcConnection:
     self._token : str = token
     self._socket : Optional[socket] = None
     self._channels : dict[str, libtwitch.IrcChannel] = {}
-    self._back_buffer : list[str] = []
+    self._back_buffer : list[bytes] = []
 
     self.rate : float = RATE_USER
     self._running : bool = False
@@ -258,4 +258,13 @@ class IrcConnection:
     pass
 
   def on_roomstate(self, channel : libtwitch.IrcChannel, tags : dict[str, str]):
+    pass
+
+  def on_subgift(self, event : libtwitch.SubGiftEvent):
+    pass
+
+  def on_raid(self, event : libtwitch.RaidEvent):
+    pass
+
+  def on_ritual(self, event : libtwitch.RitualEvent):
     pass
