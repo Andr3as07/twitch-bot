@@ -1,0 +1,17 @@
+{
+  "min_username": 3,
+  "min_message": 5,
+  "actions": [
+    {
+      "count": 1,
+      "messages": [
+        "@{user.name} -> Stop using barcodes."
+      ],
+      "mod_action": {
+        "type": "timeout",
+        "reason": "Using barcodes",
+        "constant": 10
+      }
+    }
+  ]
+}

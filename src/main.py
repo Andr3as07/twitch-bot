@@ -150,6 +150,7 @@ if __name__ == '__main__':
   bot.load_extension("symbols")
   bot.load_extension("me")
   bot.load_extension("emote")
+  bot.load_extension("barcode")
 
   # Util
   bot.load_extension("console")
