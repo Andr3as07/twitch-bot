@@ -1,0 +1,18 @@
+{
+  "min": 5,
+  "max": 50,
+  "percent": 0.6,
+  "actions": [
+    {
+      "count": 1,
+      "messages": [
+        "@{user.name} -> Please refrain from spamming symbols."
+      ],
+      "mod_action": {
+        "type": "nothing",
+        "reason": "Using symbols",
+        "constant": 10
+      }
+    }
+  ]
+}

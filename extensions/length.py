@@ -1,10 +1,7 @@
-import io
-import json
-import os
 from typing import Optional
 
 from libtwitch import Bot, BotMessage, ModerationAction, Plugin
-from src import modutil
+from src import modutil, pluginutil
 
 class ModLength(Plugin):
   name = "mod.length"
@@ -13,29 +10,22 @@ class ModLength(Plugin):
     self.config = None
 
   def on_load(self):
-    config_path = self.get_config_dir() + "/config.json"
-    if not os.path.exists(config_path):
-      self.config = {
-        "length": 300,
-        "actions": [
-          {
-            "count": 1,
-            "messages": [
-              "@{user.name} -> Please no lengthy messages."
-            ],
-            "mod_action": {
-              "type": "timeout",
-              "reason": "Writing Long Paragraphs",
-              "constant": 10
-            }
+    self.config = pluginutil.load_config(self, {
+      "length": 300,
+      "actions": [
+        {
+          "count": 1,
+          "messages": [
+            "@{user.name} -> Please no lengthy messages."
+          ],
+          "mod_action": {
+            "type": "timeout",
+            "reason": "Writing Long Paragraphs",
+            "constant": 10
           }
-        ]
-      }
-    else:
-      with io.open(config_path) as f:
-        jdata = json.load(f)
-      if jdata is not None:
-        self.config = jdata
+        }
+      ]
+    })
 
   def _on_moderate_impl(self, message : BotMessage) -> bool:
     length = self.config["length"]

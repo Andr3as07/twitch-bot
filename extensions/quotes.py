@@ -8,7 +8,7 @@ from datetime import datetime
 
 import libtwitch
 from libtwitch import Bot, BotMessage, Plugin
-from src import textutil
+from src import pluginutil, textutil
 
 @dataclass
 class Quote:
@@ -33,21 +33,14 @@ class FunQuotes(Plugin):
     self.config = None
 
   def on_load(self):
-    config_path = self.get_config_dir() + "/config.json"
-    if not os.path.exists(config_path):
-      self.config = {
-        "format": "Quote #{quote.index}: {quote.text} [{quote.game}] [{quote.time}]",
-        "not_found": "@{user.name}, quote not found.",
-        "none_found": "@{user.name}, this channel has no quotes.",
-        "out_of_range": "@{user.name}, quote must be in range 1 to {quote.count}.",
-        "no_content": "@{user.name}, can not create a quote with no content.",
-        "deleted": "@{user.name}, deleted quote #{quote.index}.",
-      }
-    else:
-      with io.open(config_path) as f:
-        jdata = json.load(f)
-      if jdata is not None:
-        self.config = jdata
+    self.config = pluginutil.load_config(self, {
+      "format": "Quote #{quote.index}: {quote.text} [{quote.game}] [{quote.time}]",
+      "not_found": "@{user.name}, quote not found.",
+      "none_found": "@{user.name}, this channel has no quotes.",
+      "out_of_range": "@{user.name}, quote must be in range 1 to {quote.count}.",
+      "no_content": "@{user.name}, can not create a quote with no content.",
+      "deleted": "@{user.name}, deleted quote #{quote.index}."
+    })
 
   def _load_quotes(self, channel : libtwitch.IrcChannel) -> list[Quote]:
     dir_path = self.get_data_dir() + "/channels/" + channel.name

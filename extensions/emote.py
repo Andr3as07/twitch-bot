@@ -6,7 +6,7 @@ from enum import Enum, auto
 from typing import Optional, Union
 
 from libtwitch import Bot, BotMessage, IrcChannel, ModerationAction, Plugin
-from src import modutil
+from src import modutil, pluginutil
 
 class EmoteSource(Enum):
   Twitch = auto()
@@ -32,17 +32,10 @@ class UtilEmote(Plugin):
     self.config = None
 
   def on_load(self):
-    config_path = self.get_config_dir() + "/config.json"
-    if not os.path.exists(config_path):
-      self.config = {
-        "use_bttv": True,
-        "use_frankerfacez": True
-      }
-    else:
-      with io.open(config_path) as f:
-        jdata = json.load(f)
-      if jdata is not None:
-        self.config = jdata
+    self.config = pluginutil.load_config(self, {
+      "use_bttv": True,
+      "use_frankerfacez": True
+    })
 
     if self.config['use_bttv']:
       _, global_emotes = self.bot.request_handler.get_request_sync('https://api.betterttv.net/3/cached/emotes/global')
@@ -161,31 +154,24 @@ class ModEmote(Plugin):
     self.config = None
 
   def on_load(self):
-    config_path = self.get_config_dir() + "/config.json"
-    if not os.path.exists(config_path):
-      self.config = {
-        "min": 5,
-        "max": 20,
-        "percent": 0.60,
-        "actions": [
-          {
-            "count": 1,
-            "messages": [
-              "@{user.name} -> Please refrain from spamming emotes."
-            ],
-            "mod_action": {
-              "type": "timeout",
-              "reason": "Spamming Emotes",
-              "constant": 10
-            }
+    self.config = pluginutil.load_config(self, {
+      "min": 5,
+      "max": 20,
+      "percent": 0.60,
+      "actions": [
+        {
+          "count": 1,
+          "messages": [
+            "@{user.name} -> Please refrain from spamming emotes."
+          ],
+          "mod_action": {
+            "type": "timeout",
+            "reason": "Spamming Emotes",
+            "constant": 10
           }
-        ]
-      }
-    else:
-      with io.open(config_path) as f:
-        jdata = json.load(f)
-      if jdata is not None:
-        self.config = jdata
+        }
+      ]
+    })
 
   def _on_moderate_impl(self, message : BotMessage) -> bool:
     util_plugin : Optional[UtilEmote] = self.bot.get_plugin("util.emote")

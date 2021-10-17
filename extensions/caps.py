@@ -5,7 +5,7 @@ from typing import Optional
 
 from extensions.emote import Emote, UtilEmote
 from libtwitch import Bot, BotMessage, ModerationAction, Plugin
-from src import modutil
+from src import modutil, pluginutil
 
 class ModCaps(Plugin):
   name = "mod.caps"
@@ -14,31 +14,24 @@ class ModCaps(Plugin):
     self.config = None
 
   def on_load(self):
-    config_path = self.get_config_dir() + "/config.json"
-    if not os.path.exists(config_path):
-      self.config = {
-        "min": 10,
-        "max": 50,
-        "percent": 0.60,
-        "actions": [
-          {
-            "count": 1,
-            "messages": [
-              "@{user.name} -> Stop spamming caps."
-            ],
-            "mod_action": {
-              "type": "timeout",
-              "reason": "Spamming Caps",
-              "constant": 10
-            }
+    self.config = pluginutil.load_config(self, {
+      "min": 10,
+      "max": 50,
+      "percent": 0.60,
+      "actions": [
+        {
+          "count": 1,
+          "messages": [
+            "@{user.name} -> Stop spamming caps."
+          ],
+          "mod_action": {
+            "type": "timeout",
+            "reason": "Spamming Caps",
+            "constant": 10
           }
-        ]
-      }
-    else:
-      with io.open(config_path) as f:
-        jdata = json.load(f)
-      if jdata is not None:
-        self.config = jdata
+        }
+      ]
+    })
 
   @staticmethod
   def _remove_emotes(text: str, emotes: list[Emote]) -> str:

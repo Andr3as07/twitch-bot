@@ -4,7 +4,7 @@ import os
 from typing import Optional
 
 from libtwitch import Bot, BotMessage, ModerationAction, Plugin
-from src import modutil, textutil
+from src import modutil, pluginutil, textutil
 
 class ModSymbols(Plugin):
   name = "mod.symbols"
@@ -13,31 +13,24 @@ class ModSymbols(Plugin):
     self.config = None
 
   def on_load(self):
-    config_path = self.get_config_dir() + "/config.json"
-    if not os.path.exists(config_path):
-      self.config = {
-        "min": 5,
-        "max": 50,
-        "percent": 0.60,
-        "actions": [
-          {
-            "count": 1,
-            "messages": [
-              "@{user.name} -> Please refrain from spamming symbols."
-            ],
-            "mod_action": {
-              "type": "nothing",
-              "reason": "Using symbols",
-              "constant": 10
-            }
+    self.config = pluginutil.load_config(self, {
+      "min": 5,
+      "max": 50,
+      "percent": 0.60,
+      "actions": [
+        {
+          "count": 1,
+          "messages": [
+            "@{user.name} -> Please refrain from spamming symbols."
+          ],
+          "mod_action": {
+            "type": "nothing",
+            "reason": "Using symbols",
+            "constant": 10
           }
-        ]
-      }
-    else:
-      with io.open(config_path) as f:
-        jdata = json.load(f)
-      if jdata is not None:
-        self.config = jdata
+        }
+      ]
+    })
 
   def on_moderate(self, message : BotMessage) -> Optional[ModerationAction]:
     contains, symol_range = textutil.contains_symbols(message.text)

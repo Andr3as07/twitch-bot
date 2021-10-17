@@ -14,29 +14,22 @@ class ModLinks(Plugin):
     self.config = None
 
   def on_load(self):
-    config_path = self.get_config_dir() + "/config.json"
-    if not os.path.exists(config_path):
-      self.config = {
-        "actions": [
-          {
-            "count": 1,
-            "messages": [
-              "@{user.name} -> No links please."
-            ],
-            "mod_action": {
-              "type": "timeout",
-              "reason": "Writing Links",
-              "constant": 10
-            }
+    self.config = pluginutil.load_config(self, {
+      "actions": [
+        {
+          "count": 1,
+          "messages": [
+            "@{user.name} -> No links please."
+          ],
+          "mod_action": {
+            "type": "timeout",
+            "reason": "Writing Links",
+            "constant": 10
           }
-        ],
-        "whitelist": []
-      }
-    else:
-      with io.open(config_path) as f:
-        jdata = json.load(f)
-      if jdata is not None:
-        self.config = jdata
+        }
+      ],
+      "whitelist": []
+    })
 
   @staticmethod
   def _on_moderate_impl(message : BotMessage) -> bool:
