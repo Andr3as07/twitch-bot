@@ -29,21 +29,35 @@ class UtilEmote(Plugin):
     super().__init__(bot)
     self._bttv_global_emotes = {}
     self._frankerfacez_global_emotes = {}
+    self.config = None
 
   def on_load(self):
-    _, global_emotes = self.bot.request_handler.get_request_sync('https://api.betterttv.net/3/cached/emotes/global')
-    if global_emotes is not None:
-      jdata = json.loads(global_emotes)
-      for jemote in jdata:
-        self._bttv_global_emotes[jemote['code']] = jemote['id']
+    config_path = self.get_config_dir() + "/config.json"
+    if not os.path.exists(config_path):
+      self.config = {
+        "use_bttv": True,
+        "use_frankerfacez": True
+      }
+    else:
+      with io.open(config_path) as f:
+        jdata = json.load(f)
+      if jdata is not None:
+        self.config = jdata
 
-    _, global_emotes = self.bot.request_handler.get_request_sync('https://api.frankerfacez.com/v1/set/global')
-    if global_emotes is not None:
-      jdata = json.loads(global_emotes)
-      for set in jdata['sets']:
-        for jemote in jdata['sets'][set]['emoticons']:
-          self._frankerfacez_global_emotes[jemote['name']] = jemote['id']
+    if self.config['use_bttv']:
+      _, global_emotes = self.bot.request_handler.get_request_sync('https://api.betterttv.net/3/cached/emotes/global')
+      if global_emotes is not None:
+        jdata = json.loads(global_emotes)
+        for jemote in jdata:
+          self._bttv_global_emotes[jemote['code']] = jemote['id']
 
+    if self.config['use_frankerfacez']:
+      _, global_emotes = self.bot.request_handler.get_request_sync('https://api.frankerfacez.com/v1/set/global')
+      if global_emotes is not None:
+        jdata = json.loads(global_emotes)
+        for set in jdata['sets']:
+          for jemote in jdata['sets'][set]['emoticons']:
+            self._frankerfacez_global_emotes[jemote['name']] = jemote['id']
 
   @staticmethod
   def _get_twitch_emotes(message: BotMessage) -> list[Emote]:
@@ -129,10 +143,14 @@ class UtilEmote(Plugin):
   def get_emotes(self, message: BotMessage) -> list[Emote]:
     emotes : list[Emote] = []
     emotes.extend(self._get_twitch_emotes(message))
-    emotes.extend(self._get_emotes(message, self.list_bttv_global_emotes(), EmoteSource.BttvGlobal))
-    emotes.extend(self._get_emotes(message, self.list_bttv_channel_emotes(message.channel), EmoteSource.BttvChannel))
-    emotes.extend(self._get_emotes(message, self.list_frankerfacez_global_emotes(), EmoteSource.FrankerFaceZGlobal))
-    emotes.extend(self._get_emotes(message, self.list_frankerfacez_channel_emotes(message.channel), EmoteSource.FrankerFaceZChannel))
+
+    if self.config['use_bttv']:
+      emotes.extend(self._get_emotes(message, self.list_bttv_global_emotes(), EmoteSource.BttvGlobal))
+      emotes.extend(self._get_emotes(message, self.list_bttv_channel_emotes(message.channel), EmoteSource.BttvChannel))
+
+    if self.config['use_frankerfacez']:
+      emotes.extend(self._get_emotes(message, self.list_frankerfacez_global_emotes(), EmoteSource.FrankerFaceZGlobal))
+      emotes.extend(self._get_emotes(message, self.list_frankerfacez_channel_emotes(message.channel), EmoteSource.FrankerFaceZChannel))
 
     return emotes
 
