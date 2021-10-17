@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Union
 
@@ -19,6 +20,7 @@ class Plugin:
 
   def __init__(self, bot):
     self.bot = bot
+    self.logger : logging.Logger = bot.get_logger_for_plugin(self)
 
   def on_event(self, plugin_event : PluginEvent, *args, **kwargs) -> Union[None, libtwitch.ModerationAction]:
     # Bot events

@@ -16,15 +16,16 @@ class ViewerlistBotRemover(Plugin):
   def on_load(self):
     # Bot list
     url = "https://api.twitchinsights.net/v1/bots/all"
-    print('Downloading bot list from "%s"...' % url)
+    self.logger.info('Downloading bot list from "%s"...' % url)
     r = requests.get(url)
     for bot in json.loads(r.text)["bots"]:
       self.bots.append(bot[0])
 
-    print("Loaded %s bots." % len(self.bots))
+    self.logger.info("Loaded %s bots." % len(self.bots))
 
     # ignored users
     path = self.bot.get_config_dir() + "/ignored_users.txt"
+    self.logger.info('Loading ignored users list...')
     if os.path.exists(path):
       with io.open(path) as f:
         for username in f.readlines():
@@ -32,6 +33,7 @@ class ViewerlistBotRemover(Plugin):
           if len(username) == 0:
             continue
           self.ignored.append(username)
+    self.logger.info('Loaded %s ignored users.' % len(self.ignored))
 
   def _ban(self, chatter : IrcChatter):
     # Don't ban yourself
@@ -48,7 +50,7 @@ class ViewerlistBotRemover(Plugin):
 
     # Ban
     chatter.ban("Viewerlist bot")
-    print("Banned %s!" % chatter.login)
+    self.logger.info("Banned %s!" % chatter.login)
 
   def on_chatter_join(self, join_event : ChatEvent):
     self._ban(join_event.chatter)

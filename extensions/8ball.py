@@ -20,6 +20,7 @@ class Fun8Ball(Plugin):
           if len(response) == 0:
             continue
           self.responses.append(response)
+      self.logger.info("Loaded %s responses." % len(self.responses))
 
     emotes_path = self.get_config_dir() + "/emotes.txt"
     if os.path.exists(emotes_path):
@@ -29,6 +30,7 @@ class Fun8Ball(Plugin):
           if len(emote) == 0:
             continue
           self.emotes.append(emote)
+      self.logger.info("Loaded %s emotes." % len(self.emotes))
 
   def on_command(self, message : BotMessage, cmd : str, args : dict[str, str]):
     if cmd != "8ball":

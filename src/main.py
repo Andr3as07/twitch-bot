@@ -16,15 +16,7 @@ class MyBot(libtwitch.Bot):
   def __init__(self, nickname : str, token : str, path : str, datastore : Datastore, request_handler: RequestHandler):
     super().__init__(nickname, token, datastore, '?')
 
-    self.logger : logging.Logger = logging.getLogger('bot')
-    c_handler = logging.StreamHandler()
-    c_handler.setLevel(logging.DEBUG)
-    c_formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s', '%Y-%m-%d %H:%M:%S')
-    c_handler.setFormatter(c_formatter)
-    self.logger.addHandler(c_handler)
-    self.logger.setLevel(logging.DEBUG)
-
-    self.logger.debug('Initialized with nick %s.' % nickname)
+    self.logger.info('Initialized with nick %s.' % nickname)
 
     self.user_data : dict = {} # TODO: FIX: This should be separated into the different channels
 

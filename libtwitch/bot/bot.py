@@ -1,5 +1,6 @@
 from __future__ import annotations
 import importlib
+import logging
 import sys
 from typing import Any
 
@@ -10,11 +11,36 @@ class Bot(libtwitch.IrcConnection):
   def __init__(self, nickname : str, token : str, store : Datastore, prefix : str = '!'):
     super().__init__(nickname, token)
 
+    self._logger: logging.Logger = None
+
     self.datastore = store
     self.prefix = prefix
 
     self._extensions : dict[str, Any] = {}
     self._plugins : dict[str, libtwitch.Plugin] = {}
+
+  def get_logger_for_plugin(self, plugin: libtwitch.Plugin) -> logging.Logger:
+    logger : logging.Logger = logging.getLogger(plugin.get_name())
+    c_handler = logging.StreamHandler()
+    c_handler.setLevel(logging.DEBUG)
+    c_formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s', '%Y-%m-%d %H:%M:%S')
+    c_handler.setFormatter(c_formatter)
+    logger.addHandler(c_handler)
+    logger.setLevel(logging.DEBUG)
+    return logger
+
+  @property
+  def logger(self):
+    if self._logger is None:
+      logger : logging.Logger = logging.getLogger('bot')
+      c_handler = logging.StreamHandler()
+      c_handler.setLevel(logging.DEBUG)
+      c_formatter = logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s', '%Y-%m-%d %H:%M:%S')
+      c_handler.setFormatter(c_formatter)
+      logger.addHandler(c_handler)
+      logger.setLevel(logging.DEBUG)
+      self._logger = logger
+    return self._logger
 
   def register_plugin(self, plugin : libtwitch.Plugin):
     if not isinstance(plugin, libtwitch.Plugin):
@@ -28,6 +54,8 @@ class Bot(libtwitch.IrcConnection):
       if other_plugin_name == name:
         continue
       self._on_event(libtwitch.PluginEvent.PluginLoad, name) # Inform the cog of it's own loading
+
+    print("Registered plugin %s" % plugin.name)
 
   def get_plugin(self, name : str):
     return self._plugins.get(name)
@@ -193,6 +221,8 @@ class Bot(libtwitch.IrcConnection):
         return False
       cmd = args[1].lower()
       args.pop(0)
+    else:
+      assert False, "unreachable"
     args.pop(0)
 
     self.on_command(msg, cmd, args)

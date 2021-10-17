@@ -36,19 +36,23 @@ class UtilEmote(Plugin):
     })
 
     if self.config['use_bttv']:
+      self.logger.info("Downloading global emote list from bttv...")
       _, global_emotes = self.bot.request_handler.get_request_sync('https://api.betterttv.net/3/cached/emotes/global')
       if global_emotes is not None:
         jdata = json.loads(global_emotes)
         for jemote in jdata:
           self._bttv_global_emotes[jemote['code']] = jemote['id']
+      self.logger.info("Loaded %s bttv global emotes." % len(self._bttv_global_emotes))
 
     if self.config['use_frankerfacez']:
+      self.logger.info("Downloading global emote list from FrankerFaceZ...")
       _, global_emotes = self.bot.request_handler.get_request_sync('https://api.frankerfacez.com/v1/set/global')
       if global_emotes is not None:
         jdata = json.loads(global_emotes)
         for set in jdata['sets']:
           for jemote in jdata['sets'][set]['emoticons']:
             self._frankerfacez_global_emotes[jemote['name']] = jemote['id']
+      self.logger.info("Loaded %s FrankerFaceZ global emotes." % len(self._frankerfacez_global_emotes))
 
   @staticmethod
   def _get_twitch_emotes(message: BotMessage) -> list[Emote]:
@@ -93,6 +97,7 @@ class UtilEmote(Plugin):
     if isinstance(channel, IrcChannel):
       channel = channel.id
 
+    self.logger.info("Loading bttv channel emotes for channel_id %s..." % channel)
     _, channel_emotes = self.bot.request_handler.get_request_sync('https://api.betterttv.net/3/cached/users/twitch/%s' % channel)
     if channel_emotes is None:
       return {}
@@ -105,12 +110,14 @@ class UtilEmote(Plugin):
     if 'sharedEmotes' in jdata:
       for jemote in jdata['sharedEmotes']:
         bttv_channel_emotes[jemote['code']] = jemote['id']
+    self.logger.info("Loaded %s bttv channel emotes for channel_id %s." % (len(bttv_channel_emotes), channel))
     return bttv_channel_emotes
 
   def list_frankerfacez_channel_emotes(self, channel: Union[IrcChannel, int]) -> dict[str, int]:
     if isinstance(channel, IrcChannel):
       channel = channel.id
 
+    self.logger.info("Loading FrankerFaceZ channel emotes for channel_id %s..." % channel)
     _, channel_emotes = self.bot.request_handler.get_request_sync('https://api.frankerfacez.com/v1/room/id/%s' % channel)
     if channel_emotes is None:
       return {}
@@ -123,6 +130,7 @@ class UtilEmote(Plugin):
     for set in jdata['sets']:
       for jemote in jdata['sets'][set]['emoticons']:
         frankerfacez_channel_emotes[jemote['name']] = jemote['id']
+    self.logger.info("Loaded %s FrankerFaceZ channel emotes for channel_id %s." % (len(frankerfacez_channel_emotes), channel))
     return frankerfacez_channel_emotes
 
   def list_bttv_global_emotes(self) -> dict[str, int]:
