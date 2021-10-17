@@ -3,6 +3,7 @@ import json
 import os
 from typing import Optional
 
+from extensions.emote import Emote, UtilEmote
 from libtwitch import Bot, BotMessage, ModerationAction, Plugin
 from src import modutil
 
@@ -39,10 +40,30 @@ class ModCaps(Plugin):
       if jdata is not None:
         self.config = jdata
 
+  @staticmethod
+  def _remove_emotes(text: str, emotes: list[Emote]) -> str:
+    res = ''
+    for index in range(0, len(text)):
+      in_emote = False
+      for emote in emotes:
+        if emote.start <= index <= emote.end:
+          in_emote = True
+          break
+      if in_emote:
+        continue
+      res += text[index]
+    return res
+
   def _on_moderate_impl(self, message : BotMessage) -> bool:
+    text = message.text
+    util_emote_plugin : Optional[UtilEmote] = self.bot.get_plugin("util.emote")
+    if util_emote_plugin is not None:
+      emotes = util_emote_plugin.get_emotes(message)
+      text = self._remove_emotes(text, emotes)
+
     num_caps = 0
-    length = len(message.text)
-    for char in message.text:
+    length = len(text)
+    for char in text:
       if 'A' <= char <= 'Z':
         num_caps += 1
 
