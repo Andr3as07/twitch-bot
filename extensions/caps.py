@@ -1,6 +1,3 @@
-import io
-import json
-import os
 from typing import Optional
 
 from extensions.emote import Emote, UtilEmote

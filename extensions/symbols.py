@@ -1,6 +1,3 @@
-import io
-import json
-import os
 from typing import Optional
 
 from libtwitch import Bot, BotMessage, ModerationAction, Plugin
